@@ -12,11 +12,12 @@ def make_component_info(source_pos, sample_pos):
     Currently this contains only source and sample position.
     The structure of this is subject to change.
     """
-    component_info = sc.Dataset(
-        {'position': sc.Variable(
-            dims=[Dim.Row],
-            values=[source_pos, sample_pos],
-            unit=sc.units.m)})
+    component_info = sc.Dataset({
+        'position':
+        sc.Variable(dims=[Dim.Row],
+                    values=[source_pos, sample_pos],
+                    unit=sc.units.m)
+    })
     return component_info
 
 
@@ -24,17 +25,27 @@ def make_component_info(source_pos, sample_pos):
 # Includes labels 'component_info', a special name that `scipp.neutron.convert` will inspect for instrument information.
 d = sc.Dataset(
     coords={
-        Dim.Position: sc.Variable(dims=[Dim.Position], shape=[n_pixel], dtype=sc.dtype.vector_3_double, unit=sc.units.m),
+        Dim.Position:
+        sc.Variable(dims=[Dim.Position],
+                    shape=[n_pixel],
+                    dtype=sc.dtype.vector_3_double,
+                    unit=sc.units.m),
         # TOF is optional, Mantid always has this but not needed at this point
-        Dim.Tof: sc.Variable(dims=[Dim.Tof], values=np.arange(1000.0), unit=sc.units.us)
+        Dim.Tof:
+        sc.Variable(dims=[Dim.Tof], values=np.arange(1000.0), unit=sc.units.us)
     },
     labels={
-        'component_info': sc.Variable(make_component_info(source_pos=[0, 0, -20], sample_pos=[0, 0, 0]))
+        'component_info':
+        sc.Variable(
+            make_component_info(source_pos=[0, 0, -20], sample_pos=[0, 0, 0]))
     })
 
 # Add sparse TOF coord, i.e., the equivalent to event-TOF in Mantid
-d.set_sparse_coord('sample', sc.Variable(dims=[Dim.Position, Dim.Tof], shape=[
-                   n_pixel, sc.Dimensions.Sparse], unit=sc.units.us))
+d.set_sparse_coord(
+    'sample',
+    sc.Variable(dims=[Dim.Position, Dim.Tof],
+                shape=[n_pixel, sc.Dimensions.Sparse],
+                unit=sc.units.us))
 
 # Set some positions
 d.coords[Dim.Position].values[0] = [1, 2, 3]
