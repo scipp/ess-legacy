@@ -32,7 +32,7 @@ d = sc.Dataset(
                     unit=sc.units.m),
         # TOF is optional, Mantid always has this but not needed at this point
         Dim.Tof:
-        sc.Variable(dims=[Dim.Tof], values=np.arange(1000.0), unit=sc.units.us)
+        sc.Variable(dims=[Dim.Tof], values=np.arange(10.0), unit=sc.units.us)
     },
     labels={
         'component_info':
@@ -60,8 +60,9 @@ print(d)
 dspacing = sc.neutron.convert(d, Dim.Tof, Dim.DSpacing)
 print(dspacing)
 
-# Converting event data to histogram (not available yet)
-# hist = sc.histogram(d)
+# Converting event data to histogram
+hist = sc.histogram(dspacing, dspacing.coords[Dim.DSpacing])
+print(hist)
 
 # "DiffractionFocussing" == sum? (not available yet)
 # focussed = sc.sum(hist, Dim.Position)
