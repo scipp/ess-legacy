@@ -41,11 +41,10 @@ d = sc.Dataset(
     })
 
 # Add sparse TOF coord, i.e., the equivalent to event-TOF in Mantid
-d.set_sparse_coord(
-    'sample',
-    sc.Variable(dims=[Dim.Position, Dim.Tof],
-                shape=[n_pixel, sc.Dimensions.Sparse],
-                unit=sc.units.us))
+tofs = sc.Variable(dims=[Dim.Position, Dim.Tof],
+                   shape=[n_pixel, sc.Dimensions.Sparse],
+                   unit=sc.units.us)
+d['sample'] = sc.DataArray(coords={Dim.Tof: tofs})
 
 # Set some positions
 d.coords[Dim.Position].values[0] = [1, 2, 3]
