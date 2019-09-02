@@ -194,25 +194,6 @@ class DreamTest:
 
         return pixel_coords
 
-    def generate_data_test(self, n_events):
-        """
-        This method generates n_events of sparse tof data.
-        To be expanded to generate plausible data into some Bragg peaks in the future
-        
-        Parameters
-        ----------
-            n_events: int
-                Number of events to generate and add to current dataset self.d
-        """
-
-        # Add some events
-        # Note: d.coords[Dim.Tof] gives the "dense" TOF coord, not the event-TOFs
-        self.d['sample'].coords[Dim.Tof][Dim.Position, 0].values = np.arange(n_events)
-        self.d['sample'].coords[Dim.Tof][Dim.Position, 1].values = np.arange(n_events)
-        #self.d['sample'].coords[Dim.Tof][Dim.Position, [1,2]].values = np.array((np.arange(n_events), np.array([3, 3, 3])))
-        # The following should be equivalent but does not work yet, see scipp/#290
-        # d['sample'].coords[Dim.Tof].values[1] = np.arange(10)
-         
     def _generate_random_sample(self, n_peaks, d_range=[0.5, 10], deltad_over_d_range=[0.1, 0.5], strength_range=[1, 10]):
         """
         Generate a random series of Bragg peaks. They will be
