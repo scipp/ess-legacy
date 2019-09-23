@@ -39,7 +39,8 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
     """
     # Make sure n_pixels and n_events are ints or can at least be converted
     n_pixels = int(n_pixels)
-    n_events = int(n_events)
+    if n_events is not None:
+        n_events = int(n_events)
 
     d = sc.Dataset()
     d["loaded_data"] = load(filename=filename, load_pulse_times=False)
@@ -74,7 +75,12 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
     if remaining_length > 0:
         combined_var = sc.concatenate(combined_var, positions_var[Dim.Position, 0:remaining_length], Dim.Position)
 
+    original_Tof = d["loaded_data"].coords[Dim.Tof]
+
+    # Create new dataset with new positions
     ds = sc.Dataset(coords={Dim.Position: combined_var})
+    # Keep component_info from loaded data manually
+    ds.labels["component_info"] = d.labels["component_info"]
 
     if verbose:
         print("Generated dataset before tof events are added")
@@ -89,11 +95,12 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
         original_id = 0
         for pixel_id in range(n_pixels):
             # For each pixel, grab the events from the original file
-            pos_n_events = len(np.array(d["loaded_data"].coords[Dim.Tof].values[original_id]))
+            #pos_n_events = len(np.array(d["loaded_data"].coords[Dim.Tof].values[original_id]))
+            pos_n_events = len(d["loaded_data"].coords[Dim.Tof].values[original_id])
 
             # If any events present, add random noise and append them as sparse data
             if pos_n_events > 0:
-                noise = np.random.normal(pos_n_events)*time_noise_us
+                noise = np.random.normal(pos_n_events, scale=time_noise_us)
                 new_values = np.array(d["loaded_data"].coords[Dim.Tof].values[original_id]) + noise
 
                 ds["measurement"].coords[Dim.Tof][Dim.Position, pixel_id].values.extend(new_values)
@@ -129,7 +136,9 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
 
         if math.fabs(total_events - expected_events)/total_events > 0.1 and n_events is None:
             print("With linear scaling, it was expected to get " + str(expected_events) + ", yet the result was more than 10% off.")
-        if n_events is not None and math.fabs(total_events - n_events)/total_events > 0.03:
-            print("With linear scaling, it was expected to get " + str(expected_events) + ", yet the result was more than 3% off.")
+        if n_events is not None:
+            events_change = math.fabs(total_events - n_events)/total_events
+            if events_change > 0.03:
+                print("The number of events was " + str(events_change*100) + "% off the requested number.")
 
     return ds
