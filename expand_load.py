@@ -75,20 +75,16 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
     if remaining_length > 0:
         combined_var = sc.concatenate(combined_var, positions_var[Dim.Position, 0:remaining_length], Dim.Position)
 
-    original_Tof = d["loaded_data"].coords[Dim.Tof]
-
-    # Create new dataset with new positions
-    ds = sc.Dataset(coords={Dim.Position: combined_var})
+    # Create sparse tof data
+    tofs = sc.Variable(dims=[Dim.Position, Dim.Tof], shape=[n_pixels, sc.Dimensions.Sparse], unit=sc.units.us)
+    # Create new dataset with new positions and tof sparse data
+    ds = sc.DataArray(coords={Dim.Position: combined_var, Dim.Tof: tofs})
     # Keep component_info from loaded data manually
     ds.labels["component_info"] = d.labels["component_info"]
 
     if verbose:
         print("Generated dataset before tof events are added")
         print(ds)
-
-    # Adding sparse data to dataset
-    tofs = sc.Variable(dims=[Dim.Position, Dim.Tof], shape=[n_pixels, sc.Dimensions.Sparse], unit=sc.units.us)
-    ds["measurement"] = sc.DataArray(coords={Dim.Tof: tofs})
 
     added_events = 0
     while n_events is None or added_events < n_events: # keep adding sparse data until enough events reached
@@ -103,7 +99,7 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
                 noise = np.random.normal(pos_n_events, scale=time_noise_us)
                 new_values = np.array(d["loaded_data"].coords[Dim.Tof].values[original_id]) + noise
 
-                ds["measurement"].coords[Dim.Tof][Dim.Position, pixel_id].values.extend(new_values)
+                ds.coords[Dim.Tof][Dim.Position, pixel_id].values.extend(new_values)
                 added_events += pos_n_events
 
             if n_events is not None and added_events >= n_events:
@@ -122,7 +118,7 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
         final_pixel_length = len(np.array(ds.coords[Dim.Position].values))
         total_events = 0
         for pixel_id in range(n_pixels):
-            total_events += len(np.array(ds["measurement"].coords[Dim.Tof].values[pixel_id]))
+            total_events += len(np.array(ds.coords[Dim.Tof].values[pixel_id]))
 
         print("Generated dataset after tof events are added")
         print(ds)
