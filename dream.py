@@ -1,6 +1,10 @@
+import sys
+sys.path.append("/home/mbertelsen/SWAT/scipp_github/scipp/install")
+
 import time
 import numpy as np
 import scipp as sc
+import matplotlib
 from scipp import Dim
 
 class bragg_peak:
@@ -84,11 +88,14 @@ class DreamTest:
                 Number of rows in the detector
         """
 
+        self.cal = sc.Dataset()
+
         # Includes labels 'component_info', a special name that `scipp.neutron.convert` will inspect for instrument information.
         self.d = sc.Dataset(
             coords={
                 Dim.Position:
-                self._make_cylinder_coords(n_pixel, n_rows, radius=detector_radius),
+                self._make_cylinder_coords(n_pixel, n_rows, radius=detector_radius,
+                                           source_sample_dist=source_sample_dist, write_calibration=True),
                 # TOF is optional, Mantid always has this but not needed at this point
                 Dim.Tof:
                 sc.Variable(dims=[Dim.Tof], values=np.arange(10.0), unit=sc.units.us)
@@ -132,14 +139,18 @@ class DreamTest:
         return component_info
 
     def _make_cylinder_coords(self, n_pixel, n_rows=1, height=0.1, radius=4,
-                             center=[0,0,0], ttheta_min=15, ttheta_max=160):
+                             center=[0,0,0], ttheta_min=15, ttheta_max=160,
+                             write_calibration=False, source_sample_dist=None):
         """
         Create a scipp variable with positions of detector pixels on a
         cylindrical detector with symmetry around y axis and detection
         in the zx plane. The positions correspond to the center of the
         pixels.  If the total number of pixels can not be evenly split
         into the given number of rows, a scipp variable with a lower
-        number of pixels is returned.
+        number of pixels is returned. The function can write a simple
+        calibration Dataset if the keyword argument write_calibration
+        is set to True, and in this case the source_sample_dist must
+        be set as well.
 
         Parameters
         ----------
@@ -165,6 +176,12 @@ class DreamTest:
 
             ttheta_max: double
                 Maximum value of two theta covered by the detector
+
+            write_calibration: bool
+                True if a calibration Dataset should be written
+
+            source_sample_dist: double
+                Distance from source to sample to use in calibration data
         """
 
         if not n_pixel % n_rows == 0:
@@ -179,6 +196,15 @@ class DreamTest:
         # Create a numpy array that describes detector positions
         pixel_positions = np.zeros((n_pixel_per_row*n_rows, 3))
         ttheta_array = np.linspace(ttheta_min, ttheta_max, n_pixel_per_row)
+        if write_calibration:
+            if source_sample_dist is None:
+                print("source_sample_dist necessary for creating calibration file!")
+            difc = np.zeros((n_pixel_per_row*n_rows))
+            m_n = 1.674E-27
+            plancks = 6.62607E-34
+            # [s/m] -> [us/AA] 1E6/1E10 = 1E-4
+            unit_conversion = 1E-4
+            constant = unit_conversion*m_n/plancks
 
         for row in range(n_rows):
             from_index = row*n_pixel_per_row
@@ -186,11 +212,20 @@ class DreamTest:
             pixel_positions[from_index:to_index,0] = radius*np.sin(np.pi/180*ttheta_array) + center[0]
             pixel_positions[from_index:to_index,1] = heights[row]
             pixel_positions[from_index:to_index,2] = radius*np.cos(np.pi/180*ttheta_array) + center[2]
+            if write_calibration:
+                source_to_detector = source_sample_dist + np.sqrt(radius**2 + heights[row]**2)
+                difc[from_index:to_index] = 2*constant*source_to_detector*np.sin(np.pi/180*0.5*ttheta_array)
+
+
 
         # Use this to initialize the pixel coordinates
         pixel_coords = sc.Variable(dims=[Dim.Position],
                                    values=pixel_positions,
                                    unit=sc.units.m)
+
+        if write_calibration:
+            self.cal["tzero"] = sc.Variable(dims=[Dim.Position], values=np.zeros(n_pixel_per_row*n_rows), unit=sc.units.us)
+            self.cal["difc"] = sc.Variable(dims=[Dim.Position], values=difc, unit=sc.units.us/sc.units.angstrom)
 
         return pixel_coords
 
@@ -266,7 +301,7 @@ class DreamTest:
             raise ValueError("Provided wavelength band with negative wavelengths.")
 
         # get pixel theta:
-        positions = np.array(dream.d.coords[Dim.Position].values)
+        positions = np.array(self.d.coords[Dim.Position].values)
         n_positions = (len(positions))
         z_dir = np.zeros((n_positions, 3))
         z_dir[:,2] = 1.0
@@ -327,7 +362,7 @@ class DreamTest:
 
         end_time = time.time()
         print("Data was generated in " +  "%.2f" % (end_time - start_time) + " seconds.")
-        
+
         if verbose:
             sum_times = 0
             min_time = None
@@ -354,26 +389,3 @@ class DreamTest:
             fraction_of_optimal = frame_time*14/1E6
             print("Corresponding to a frame of: " + "%.0f" % frame_time + " us, which is "
                   + "%.1f" % (fraction_of_optimal*100) + "% of the available frame")
-
-# Script for demonstration of event generation
-n_pixel = int(1E5)
-n_events = int(1E7)
-
-dream = DreamTest(n_pixel)
-print("Dataset with pixels initialzied")
-print(dream.d)
-
-print("Generating random sample")
-dream._generate_random_sample(15)
-
-print("Generating random sparse data")
-dream.generate_data_pseudo(n_events)
-print(dream.d)
-
-dspacing = sc.neutron.convert(dream.d, Dim.Tof, Dim.DSpacing)
-
-# Conversion to histogram still does not work, even though data is realistic
-#histogram = sc.histogram(dspacing, dspacing.coords[Dim.DSpacing])
-
-# "DiffractionFocussing" == sum? (not available yet)
-# focussed = sc.sum(hist, Dim.Position)
