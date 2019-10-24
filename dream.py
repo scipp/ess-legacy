@@ -1,10 +1,6 @@
-import sys
-sys.path.append("/home/mbertelsen/SWAT/scipp_github/scipp/install")
-
 import time
 import numpy as np
 import scipp as sc
-import matplotlib
 from scipp import Dim
 
 class bragg_peak:
