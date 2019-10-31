@@ -2,6 +2,8 @@ import time
 import numpy as np
 import scipp as sc
 from scipp import Dim
+from scipy import constants as scipy_constants
+
 
 class bragg_peak:
     """
@@ -20,13 +22,13 @@ class bragg_peak:
 
         Parameters
         ----------
-            d_spacing: float
+            d_spacing: float [AA]
                 Central d_spacing of the peak
 
-            d_width: float
+            d_width: float [AA]
                 Width of the gaussian d_spacing distribution
 
-            strength: float
+            strength: float [Arb]
                 Strength of the Bragg peak (relative)
         """
 
@@ -36,14 +38,14 @@ class bragg_peak:
 
     def generate_events(self, events_per_strength):
         """
-        Will generator a poisson distributed number of events with
+        Will generate a poisson distributed number of events with
         expectation value: strength*events_per_strength.
         The events is distributed around the central d_spacing value
         with the given d_spacing width.
 
         Parameters
         ----------
-            events_per_strength: float
+            events_per_strength: float [Arb]
                 Number of events expected per strength of the Bragg peak
         """
 
@@ -65,7 +67,7 @@ class DreamTest:
         Initialize the simplified DREAM instrument.
         Sets up a scipp dataset including:
             Source and sample position (along z direction)
-            Detector pixels in cylinder arround sample (symmetry in y direction)
+            Detector pixels in cylinder around sample (symmetry in y direction)
             Dense tof dimension
             Sparse tof dimension
 
@@ -74,10 +76,10 @@ class DreamTest:
             n_pixel: int
                 Number of pixels in generated detector array
 
-            source_sample_dist: double
+            source_sample_dist: double [m]
                 Distance from source to sample
 
-            detector_radius: double
+            detector_radius: double [m]
                 Radius of detector (centered on sample)
 
             n_rows: int
@@ -87,7 +89,7 @@ class DreamTest:
         self.cal = sc.Dataset()
 
         # Includes labels 'component_info', a special name that `scipp.neutron.convert` will inspect for instrument information.
-        self.d = sc.Dataset(
+        self.data = sc.Dataset(
             coords={
                 Dim.Position:
                 self._make_cylinder_coords(n_pixel, n_rows, radius=detector_radius,
@@ -106,7 +108,7 @@ class DreamTest:
         tofs = sc.Variable(dims=[Dim.Position, Dim.Tof],
                            shape=[n_pixel, sc.Dimensions.Sparse],
                            unit=sc.units.us)
-        self.d['sample'] = sc.DataArray(coords={Dim.Tof: tofs})
+        self.data['sample'] = sc.DataArray(coords={Dim.Tof: tofs})
 
         # source_sample_dist needed in data generation
         self.source_sample_dist = source_sample_dist
@@ -158,25 +160,25 @@ class DreamTest:
             n_rows: int
                 Number of rows to split the pixels into
 
-            height: double
+            height: float [m]
                 Total height between lowest pixel center and highest
 
-            radius: double
+            radius: float [m]
                 Distance from symmetry axis to each pixel
 
-            center: array of 3 double
+            center: array of 3 float [m]
                 Center position of detector array (usually sample position)
 
-            ttheta_min: double
+            ttheta_min: float [deg]
                 Minimum value of two theta covered by the detector
 
-            ttheta_max: double
+            ttheta_max: float [deg]
                 Maximum value of two theta covered by the detector
 
             write_calibration: bool
                 True if a calibration Dataset should be written
 
-            source_sample_dist: double
+            source_sample_dist: float [m]
                 Distance from source to sample to use in calibration data
         """
 
@@ -196,11 +198,10 @@ class DreamTest:
             if source_sample_dist is None:
                 print("source_sample_dist necessary for creating calibration file!")
             difc = np.zeros((n_pixel_per_row*n_rows))
-            m_n = 1.674E-27
-            plancks = 6.62607E-34
+            #constant = unit_conversion*m_n/plancks
             # [s/m] -> [us/AA] 1E6/1E10 = 1E-4
             unit_conversion = 1E-4
-            constant = unit_conversion*m_n/plancks
+            constant = unit_conversion*scipy_constants.m_n/scipy_constants.h
 
         for row in range(n_rows):
             from_index = row*n_pixel_per_row
@@ -225,7 +226,7 @@ class DreamTest:
 
         return pixel_coords
 
-    def _generate_random_sample(self, n_peaks, d_range=[0.5, 10], deltad_over_d_range=[0.1, 0.5], strength_range=[1, 10]):
+    def generate_random_sample(self, n_peaks, d_range=[0.5, 10], deltad_over_d_range=[0.1, 0.5], strength_range=[1, 10]):
         """
         Generate a random series of Bragg peaks. They will be
         stored sorted with respect to d spacing to allow the
@@ -236,7 +237,7 @@ class DreamTest:
             n_peaks: int
                 Number of Bragg peaks to generate
 
-            d_range: List[2] [Å]
+            d_range: List[2] [AA]
                 Start and end of allowed d range interval
 
             deltad_over_d_range: List[2] [%]
@@ -277,10 +278,10 @@ class DreamTest:
             n_events: int
                 Number of events to generate
 
-            wavelength_width: float [Å]
+            wavelength_width: float [AA]
                 Width of wavelength frame of the instrument, 3.6 Å should fill the frame with perfect source
 
-            wavelength_center: float [Å]
+            wavelength_center: float [AA]
                 Center of wavelength frame of the instrument, typicall around 2.5-3.0 Å
 
             effective_pulse_length: float [s]
@@ -297,7 +298,7 @@ class DreamTest:
             raise ValueError("Provided wavelength band with negative wavelengths.")
 
         # get pixel theta:
-        positions = np.array(self.d.coords[Dim.Position].values)
+        positions = np.array(self.data.coords[Dim.Position].values)
         n_positions = (len(positions))
         z_dir = np.zeros((n_positions, 3))
         z_dir[:,2] = 1.0
@@ -354,7 +355,7 @@ class DreamTest:
                 # add some time uncertainty from pulse length (realistically it will be reduced by chopper settings)
                 event_times = travel_time + effective_pulse_length*np.random.randn(len(travel_time))
                 # Write the events to the pixel with the current pixel_id
-                self.d['sample'].coords[Dim.Tof][Dim.Position, pixel_id].values = event_times*1E6 # [s] -> [us] convert to us
+                self.data['sample'].coords[Dim.Tof][Dim.Position, pixel_id].values = event_times*1E6 # [s] -> [us] convert to us
 
         end_time = time.time()
         print("Data was generated in " +  "%.2f" % (end_time - start_time) + " seconds.")
@@ -363,7 +364,7 @@ class DreamTest:
             sum_times = 0
             min_time = None
             max_time = 0
-            for array in np.array(self.d["sample"].coords[Dim.Tof].values):
+            for array in np.array(self.data["sample"].coords[Dim.Tof].values):
                 sum_times += len(array)
                 if len(array) > 0:
                     if min_time is None or np.min(array) < min_time:
@@ -377,7 +378,7 @@ class DreamTest:
                         print(array)
 
             #print(sum_times)
-            n_pixels_read = len(np.array(self.d["sample"].coords[Dim.Tof].values))
+            n_pixels_read = len(np.array(self.data["sample"].coords[Dim.Tof].values))
             print("Distributed " + str(sum_times) + " events into " + str(n_pixels_read) + " pixels.")
             print("Minimum time recorded: " + "%.0f" % min_time + " us")
             print("Maximum time recorded: " + "%.0f" % max_time + " us")
