@@ -132,7 +132,7 @@ class DreamTest:
             'position':
             sc.Variable(dims=[Dim.Row],
                         values=[source_pos, sample_pos],
-                        unit=sc.units.m)
+                        unit=sc.units.m, dtype=sc.dtype.vector_3_double)
         })
         return component_info
 
@@ -218,7 +218,7 @@ class DreamTest:
         # Use this to initialize the pixel coordinates
         pixel_coords = sc.Variable(dims=[Dim.Position],
                                    values=pixel_positions,
-                                   unit=sc.units.m)
+                                   unit=sc.units.m, dtype=sc.dtype.vector_3_double)
 
         if write_calibration:
             self.cal["tzero"] = sc.Variable(dims=[Dim.Position], values=np.zeros(n_pixel_per_row*n_rows), unit=sc.units.us)
