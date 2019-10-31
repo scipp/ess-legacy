@@ -93,10 +93,7 @@ class DreamTest:
             coords={
                 Dim.Position:
                 self._make_cylinder_coords(n_pixel, n_rows, radius=detector_radius,
-                                           source_sample_dist=source_sample_dist, write_calibration=True),
-                # TOF is optional, Mantid always has this but not needed at this point
-                Dim.Tof:
-                sc.Variable(dims=[Dim.Tof], values=np.arange(10.0), unit=sc.units.us)
+                                           source_sample_dist=source_sample_dist, write_calibration=True)
             },
             labels={
                 'component_info':
