@@ -44,12 +44,13 @@ if __name__ == '__main__':
     N = 100
     x = np.arange(N)
     y0 = np.zeros(N)
-    err = np.sqrt(y0)
     y = y0
-    y += err*np.random.normal(size=len(err))
     for i, item in enumerate(y):
         xi = (15.0 / (N-1)) * i
         y[i] = np.cos(xi) * np.exp(-0.1*xi)
+    err = np.sqrt(y)
+    #y += err*np.random.normal(size=len(err))
+    err = np.sqrt(y)
 
     input_y = sc.Variable(dims=[Dim.Tof], values=y, variances=err**2, unit=sc.units.us)
     output = bspline_background(input_y, x, dim=Dim.Tof)
