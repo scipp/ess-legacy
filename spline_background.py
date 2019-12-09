@@ -1,28 +1,32 @@
 import numpy as np
 from scipy import interpolate
 
+import scipp as sc
 
-def bspline_background(variable, x_values, dim=None):
+
+def bspline_background(variable, dim):
     """
     Use scipy bspline method to create a fitting function to data in `variable`.
     Knots and splines are evaluated internally.
 
     Parameters
     ----------
-        variable: scipp variable
-            The variable to which the spline should be applied
-        x_values: nupmy array
-            X values for the variable data
+        variable: scipp DataArray
+            DataArray container to which values the spline should be applied
         dim: scipp Dim
             The dimension along which the spline should be calculated
+        output: scipp DataArray
+            DataArray container with the spline
     """
-
     if dim is None:
         raise ValueError("bspline_background: dimension must be specified.")
+    if not isinstance(dim, sc.Dim):
+        raise ValueError("bspline_background: dimension must be of Dim type.")
 
-    values = variable[dim, :].values
-    errors = variable[dim, :].variances
-    weights = [1.0/i*i for i in errors]
+    x_values = variable.coords[dim].values
+    values = variable.values
+    errors = variable.variances
+    weights = 1.0/errors
 
     # spline smoothing from
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.UnivariateSpline.html
@@ -30,17 +34,20 @@ def bspline_background(variable, x_values, dim=None):
     # find out the knots and splines.
     knots, u = interpolate.splprep([x_values, values], s=s, k=5, w=weights)
     # perform the B-spline interpolation
-    splined_variable = interpolate.splev(u, knots)
-    # splined_variable is a [2][data_length] array for X and Y values
+    splined = interpolate.splev(u, knots)
+    # splined is a [2][data_length] array for X and Y values
 
-    return splined_variable
+    # cast splined into DataArray type
+    output_x = sc.Variable(dims=[sc.Dim.X], values=splined[0])
+    output_y = sc.Variable(dims=[sc.Dim.X], values=splined[1])
+    output_data = sc.DataArray(data=output_y, coords={sc.Dim.X: output_x})
+
+    return output_data
 
 
 if __name__ == '__main__':
     # simple test
     import matplotlib.pyplot as plt
-    import scipp as sc
-    from scipp import Dim
 
     plt.rcParams['figure.figsize'] = [10, 8]
 
@@ -62,11 +69,17 @@ if __name__ == '__main__':
     # y += err*np.random.normal(size=len(err))
     # err = np.sqrt(y)
 
-    input_y = sc.Variable(dims=[Dim.Tof], values=y, variances=err**2, unit=sc.units.us)
-    output = bspline_background(input_y, x, dim=Dim.Tof)
+    input_x = sc.Variable(dims=[sc.Dim.X], values=x)
+    input_y = sc.Variable(dims=[sc.Dim.X], values=y, variances=err**2)
+    input_data = sc.DataArray(data=input_y, coords={sc.Dim.X: input_x})
+
+    output_array = bspline_background(input_data, sc.Dim.X)
+
+    x_sp = output_array.coords[sc.Dim.X].values
+    y_sp = output_array.values
 
     plt.figure()
-    plt.plot(x, y, 'ro', output[0], output[1], 'b')
+    plt.plot(x, y, 'ro', x_sp, y_sp, 'b')
     plt.legend(['Points', 'Interpolated B-spline', 'True'], loc='best')
     plt.axis([min(x)-1, max(x)+1, min(y)-1, max(y)+1])
     plt.title('B-Spline interpolation')
