@@ -4,7 +4,7 @@ from scipy import interpolate
 import scipp as sc
 
 
-def bspline_background(variable, dim):
+def bspline_background(variable, dim, smoothing_factor=None):
     """
     Use scipy bspline method to create a fitting function to data in `variable`.
     Knots and splines are evaluated internally.
@@ -15,6 +15,8 @@ def bspline_background(variable, dim):
             DataArray container to which values the spline should be applied
         dim: scipp Dim
             The dimension along which the spline should be calculated
+        smoothing_factor: float
+            Positive smoothing factor used to choose the number of knots
         output: scipp DataArray
             DataArray container with the spline
     """
@@ -22,17 +24,17 @@ def bspline_background(variable, dim):
         raise ValueError("bspline_background: dimension must be specified.")
     if not isinstance(dim, sc.Dim):
         raise ValueError("bspline_background: dimension must be of Dim type.")
+    if smoothing_factor < 0:
+        raise ValueError("bspline_background: smoothing_factor must be positive.")
 
     x_values = variable.coords[dim].values
     values = variable.values
     errors = variable.variances
-    weights = 1.0/errors
+    weights = np.sqrt(1.0/errors)
 
-    # spline smoothing from
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.UnivariateSpline.html
-    s = len(values)*np.std(errors)*np.std(errors)
     # find out the knots and splines.
-    knots, u = interpolate.splprep([x_values, values], s=s, k=5, w=weights)
+    knots, u = interpolate.splprep([x_values, values], s=smoothing_factor, k=5, w=weights)
     # perform the B-spline interpolation
     splined = interpolate.splev(u, knots)
     # splined is a [2][data_length] array for X and Y values
@@ -73,7 +75,7 @@ if __name__ == '__main__':
     input_y = sc.Variable(dims=[sc.Dim.X], values=y, variances=err**2)
     input_data = sc.DataArray(data=input_y, coords={sc.Dim.X: input_x})
 
-    output_array = bspline_background(input_data, sc.Dim.X)
+    output_array = bspline_background(input_data, sc.Dim.X, smoothing_factor=1)
 
     x_sp = output_array.coords[sc.Dim.X].values
     y_sp = output_array.values
