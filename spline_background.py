@@ -39,7 +39,7 @@ def bspline_background(variable, dim):
 
     # cast splined into DataArray type
     output_x = sc.Variable(dims=[dim], values=splined[0])
-    output_y = sc.Variable(dims=[dim], values=splined[1], variances=errors)
+    output_y = sc.Variable(dims=[dim], values=splined[1])
     output_data = sc.DataArray(data=output_y, coords={dim: output_x})
 
     return output_data
