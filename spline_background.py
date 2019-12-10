@@ -30,7 +30,7 @@ def bspline_background(variable, dim, smoothing_factor=None):
     x_values = variable.coords[dim].values
     values = variable.values
     errors = variable.variances
-    weights = np.sqrt(1.0/errors)
+    weights = 1.0/errors
 
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.UnivariateSpline.html
     # find out the knots and splines.
