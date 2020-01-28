@@ -7,11 +7,7 @@ from scipp.neutron.diffraction import load_calibration
 import smooth_data
 
 
-def get_lambda_range():
-    return 0.7, 10.35
-
-
-def powder_reduction(sample='sample.nxs', calibration=None):
+def powder_reduction(sample='sample.nxs', calibration=None, lambda_binning=(0.7, 10.35, 5615)):
     """
     Simple WISH reduction workflow
 
@@ -27,6 +23,8 @@ def powder_reduction(sample='sample.nxs', calibration=None):
     calibration: .cal file following Mantid's standards
         The columns correspond to detectors' IDs, offset, selection of detectors
         and groups
+        
+    lambda_binning: min, max and number of steps for binning in wavelength
 
     Returns
     -------
@@ -82,13 +80,12 @@ def powder_reduction(sample='sample.nxs', calibration=None):
     mon_conv = sc.neutron.convert(mon4_smooth, Dim.Tof, Dim.Wavelength)
 
     # Rebin monitors' data
-    # The value 5615 corresponds to the value in Mantid after rebinning
-    lambda_min, lambda_max = get_lambda_range()
+    lambda_min, lambda_max, number_bins = lambda_binning
     mon_rebin = sc.rebin(mon_conv,
                          Dim.Wavelength,
                          sc.Variable([Dim.Wavelength],
                                      unit=sc.units.angstrom,
-                                     values=np.linspace(lambda_min, lambda_max, num=5615)))
+                                     values=np.linspace(lambda_min, lambda_max, num=number_bins)))
     sample_lambda /= mon_rebin
 
     del mon_rebin, mon_conv, sample
@@ -128,8 +125,10 @@ def powder_reduction(sample='sample.nxs', calibration=None):
 if __name__ == "__main__":
 
     from scipp.plot import plot
-
+    
+    # The value 5615 for the number of bins corresponds to the value in Mantid after rebinning
     focused_hist = powder_reduction(sample='WISH00043525.nxs',
-                                    calibration="WISH_cycle_15_4_noends_10to10_dodgytube_removed_feb2016.cal")
+                                    calibration="WISH_cycle_15_4_noends_10to10_dodgytube_removed_feb2016.cal",
+                                    lambda_binning=(0.7, 10.35, 5615))
 
     plot(focused_hist)
