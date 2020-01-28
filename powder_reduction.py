@@ -6,7 +6,9 @@ from scipp import Dim
 from scipp.neutron.diffraction import load_calibration
 import smooth_data
 
-LAMBDA_RANGE = (0.7, 10.35)
+
+def get_lambda_range():
+    return 0.7, 10.35
 
 
 def powder_reduction(sample='sample.nxs', calibration=None):
@@ -43,7 +45,7 @@ def powder_reduction(sample='sample.nxs', calibration=None):
         cal = load_calibration(calibration, mantid_args=input_load_cal)
         # Merge table with detector->spectrum mapping from sample
         # (implicitly checking that detectors between sample and calibration are the same)
-        # cal = sc.merge(cal, sample.labels['detector_info'].value)
+        cal = sc.merge(cal, sample.labels['detector_info'].value)
         # Compute spectrum mask from detector mask
         mask = sc.groupby(cal['mask'], group='spectrum', combine=Dim.Spectrum).any(Dim.Detector)
 
@@ -81,7 +83,7 @@ def powder_reduction(sample='sample.nxs', calibration=None):
 
     # Rebin monitors' data
     # The value 5615 corresponds to the value in Mantid after rebinning
-    lambda_min, lambda_max = LAMBDA_RANGE
+    lambda_min, lambda_max = get_lambda_range()
     mon_rebin = sc.rebin(mon_conv,
                          Dim.Wavelength,
                          sc.Variable([Dim.Wavelength],
@@ -89,34 +91,26 @@ def powder_reduction(sample='sample.nxs', calibration=None):
                                      values=np.linspace(lambda_min, lambda_max, num=5615)))
     sample_lambda /= mon_rebin
 
-    # Delete intermediate data
     del mon_rebin, mon_conv, sample
 
-    # Convert sample data back from wavelength to tof
     sample_tof = sc.neutron.convert(sample_lambda, Dim.Wavelength, Dim.Tof)
 
-    # Delete intermediate data
     del sample_lambda
 
     # 2. Convert to d-spacing taking calibration into account
     if calibration is None:
         # No calibration data, use standard convert algorithm
-        sample_dspacing = sc.neutron.convert(data, Dim.Tof, Dim.DSpacing)
+        sample_dspacing = sc.neutron.convert(sample_tof, Dim.Tof, Dim.DSpacing)
     else:
         # Calculate dspacing from calibration file
-        # Trick to avoid error in convert_with_calibration (bug)
-        del cal['mask']
-
         sample_dspacing = sc.neutron.diffraction.convert_with_calibration(sample_tof, cal)
 
-    # Delete intermediate data
     del sample_tof
 
     # 3. Focus panels
     # Assuming sample is in Dim.DSpacing: Focus into groups
     focused = sc.groupby(sample_dspacing, group='group', combine=Dim.Group).flatten(Dim.Spectrum)
 
-    # Delete intermediate data
     del sample_dspacing
 
     # Histogram to make nice plot
@@ -126,7 +120,6 @@ def powder_reduction(sample='sample.nxs', calibration=None):
 
     focused_hist = sc.histogram(focused, dspacing_bins)
 
-    # Delete intermediate data
     del focused
 
     return focused_hist
