@@ -2,7 +2,7 @@ import scipp as sc
 from scipp import Dim
 
 
-def powder_reduction(data, calibration=None):
+def powder_reduction_convert_with_cal(data, calibration=None):
     """
     Takes a dataset with tof data and detector positions and converts to
     d-spacing. Can use calibration data which needs to contain the fields

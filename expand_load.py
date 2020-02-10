@@ -48,7 +48,7 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
         print("Loaded dataset")
         print(d)
 
-    original_length = len(np.array(d.coords[Dim.Position].values))
+    original_length = len(np.array(d.coords[Dim.Spectrum].values))
     original_events = 0
     for pixel_id in range(original_length):
         original_events += len(np.array(d["loaded_data"].coords[Dim.Tof].values[pixel_id]))
@@ -64,23 +64,23 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
 
     # Adding pixels to dataset
     current_length = original_length
-    positions_var = d.coords[Dim.Position]
+    positions_var = d.coords[Dim.Spectrum]
     combined_var = positions_var.copy()
     while (current_length <= n_pixels - original_length):
         current_length += original_length
-        combined_var = sc.concatenate(combined_var, positions_var, Dim.Position)
+        combined_var = sc.concatenate(combined_var, positions_var, Dim.Spectrum)
 
     remaining_length = n_pixels - current_length
 
     if remaining_length > 0:
-        combined_var = sc.concatenate(combined_var, positions_var[Dim.Position, 0:remaining_length], Dim.Position)
+        combined_var = sc.concatenate(combined_var, positions_var[Dim.Spectrum, 0:remaining_length], Dim.Spectrum)
 
     # Create sparse tof data
-    tofs = sc.Variable(dims=[Dim.Position, Dim.Tof], shape=[n_pixels, sc.Dimensions.Sparse], unit=sc.units.us)
+    tofs = sc.Variable(dims=[Dim.Spectrum, Dim.Tof], shape=[n_pixels, sc.Dimensions.Sparse], unit=sc.units.us)
     # Create new dataset with new positions and tof sparse data
-    ds = sc.DataArray(coords={Dim.Position: combined_var, Dim.Tof: tofs})
-    # Keep component_info from loaded data manually
-    ds.labels["component_info"] = d.labels["component_info"]
+    ds = sc.DataArray(coords={Dim.Spectrum: combined_var, Dim.Tof: tofs})
+    # Keep detector_info from loaded data manually
+    ds.labels["detector_info"] = d.labels["detector_info"]
 
     if verbose:
         print("Generated dataset before tof events are added")
@@ -99,7 +99,7 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
                 noise = np.random.normal(pos_n_events, scale=time_noise_us)
                 new_values = np.array(d["loaded_data"].coords[Dim.Tof].values[original_id]) + noise
 
-                ds.coords[Dim.Tof][Dim.Position, pixel_id].values.extend(new_values)
+                ds.coords[Dim.Tof][Dim.Spectrum, pixel_id].values.extend(new_values)
                 added_events += pos_n_events
 
             if n_events is not None and added_events >= n_events:
@@ -115,7 +115,7 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
             break
 
     if verbose:
-        final_pixel_length = len(np.array(ds.coords[Dim.Position].values))
+        final_pixel_length = len(np.array(ds.coords[Dim.Spectrum].values))
         total_events = 0
         for pixel_id in range(n_pixels):
             total_events += len(np.array(ds.coords[Dim.Tof].values[pixel_id]))
