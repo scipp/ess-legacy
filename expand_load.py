@@ -1,6 +1,5 @@
 import math
 import scipp as sc
-from scipp import Dim
 import numpy as np
 import matplotlib
 from scipp.compat.mantid import load
@@ -48,10 +47,10 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
         print("Loaded dataset")
         print(d)
 
-    original_length = len(np.array(d.coords[Dim.Spectrum].values))
+    original_length = len(np.array(d.coords['spectrum'].values))
     original_events = 0
     for pixel_id in range(original_length):
-        original_events += len(np.array(d["loaded_data"].coords[Dim.Tof].values[pixel_id]))
+        original_events += len(np.array(d["loaded_data"].coords['tof'].values[pixel_id]))
 
     if n_pixels < original_length:
         raise ValueError("n_pixel less than number of pixels in existing datafile")
@@ -64,23 +63,23 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
 
     # Adding pixels to dataset
     current_length = original_length
-    positions_var = d.coords[Dim.Spectrum]
+    positions_var = d.coords['spectrum']
     combined_var = positions_var.copy()
     while (current_length <= n_pixels - original_length):
         current_length += original_length
-        combined_var = sc.concatenate(combined_var, positions_var, Dim.Spectrum)
+        combined_var = sc.concatenate(combined_var, positions_var, 'spectrum')
 
     remaining_length = n_pixels - current_length
 
     if remaining_length > 0:
-        combined_var = sc.concatenate(combined_var, positions_var[Dim.Spectrum, 0:remaining_length], Dim.Spectrum)
+        combined_var = sc.concatenate(combined_var, positions_var['spectrum', 0:remaining_length], 'spectrum')
 
     # Create sparse tof data
-    tofs = sc.Variable(dims=[Dim.Spectrum, Dim.Tof], shape=[n_pixels, sc.Dimensions.Sparse], unit=sc.units.us)
+    tofs = sc.Variable(dims=['spectrum', 'tof'], shape=[n_pixels, sc.Dimensions.Sparse], unit=sc.units.us)
     # Create new dataset with new positions and tof sparse data
-    ds = sc.DataArray(coords={Dim.Spectrum: combined_var, Dim.Tof: tofs})
+    ds = sc.DataArray(coords={'spectrum': combined_var, 'tof': tofs})
     # Keep detector_info from loaded data manually
-    ds.labels["detector_info"] = d.labels["detector_info"]
+    ds.coords["detector_info"] = d.coords["detector_info"]
 
     if verbose:
         print("Generated dataset before tof events are added")
@@ -91,15 +90,14 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
         original_id = 0
         for pixel_id in range(n_pixels):
             # For each pixel, grab the events from the original file
-            #pos_n_events = len(np.array(d["loaded_data"].coords[Dim.Tof].values[original_id]))
-            pos_n_events = len(d["loaded_data"].coords[Dim.Tof].values[original_id])
+            pos_n_events = len(d["loaded_data"].coords['tof'].values[original_id])
 
             # If any events present, add random noise and append them as sparse data
             if pos_n_events > 0:
                 noise = np.random.normal(pos_n_events, scale=time_noise_us)
-                new_values = np.array(d["loaded_data"].coords[Dim.Tof].values[original_id]) + noise
+                new_values = np.array(d["loaded_data"].coords['tof'].values[original_id]) + noise
 
-                ds.coords[Dim.Tof][Dim.Spectrum, pixel_id].values.extend(new_values)
+                ds.coords['tof']['spectrum', pixel_id].values.extend(new_values)
                 added_events += pos_n_events
 
             if n_events is not None and added_events >= n_events:
@@ -115,10 +113,10 @@ def expand_data_file(filename, n_pixels, n_events=None, time_noise_us=200, verbo
             break
 
     if verbose:
-        final_pixel_length = len(np.array(ds.coords[Dim.Spectrum].values))
+        final_pixel_length = len(np.array(ds.coords['spectrum'].values))
         total_events = 0
         for pixel_id in range(n_pixels):
-            total_events += len(np.array(ds.coords[Dim.Tof].values[pixel_id]))
+            total_events += len(np.array(ds.coords['tof'].values[pixel_id]))
 
         print("Generated dataset after tof events are added")
         print(ds)
