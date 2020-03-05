@@ -1,7 +1,6 @@
 import time
 import numpy as np
 import scipp as sc
-from scipp import Dim
 from scipy import constants as scipy_constants
 
 
@@ -88,24 +87,22 @@ class DreamTest:
 
         self.cal = sc.Dataset()
 
-        # Includes labels 'component_info', a special name that `scipp.neutron.convert` will inspect for instrument information.
+        # Includes coords 'component_info', a special name that `scipp.neutron.convert` will inspect for instrument information.
         self.data = sc.Dataset(
             coords={
-                Dim.Position:
+                'position':
                 self._make_cylinder_coords(n_pixel, n_rows, radius=detector_radius,
-                                           source_sample_dist=source_sample_dist, write_calibration=True)
-            },
-            labels={
+                                           source_sample_dist=source_sample_dist, write_calibration=True),
                 'component_info':
                 sc.Variable(
                     self._make_component_info(source_pos=[0, 0, -source_sample_dist], sample_pos=[0, 0, 0]))
             })
 
         # Add sparse TOF coord, i.e., the equivalent to event-TOF in Mantid
-        tofs = sc.Variable(dims=[Dim.Position, Dim.Tof],
+        tofs = sc.Variable(dims=['position', 'tof'],
                            shape=[n_pixel, sc.Dimensions.Sparse],
                            unit=sc.units.us)
-        self.data['sample'] = sc.DataArray(coords={Dim.Tof: tofs})
+        self.data['sample'] = sc.DataArray(coords={'tof': tofs})
 
         # source_sample_dist needed in data generation
         self.source_sample_dist = source_sample_dist
@@ -127,7 +124,7 @@ class DreamTest:
         """
         component_info = sc.Dataset({
             'position':
-            sc.Variable(dims=[Dim.Row],
+            sc.Variable(dims=['row'],
                         values=[source_pos, sample_pos],
                         unit=sc.units.m, dtype=sc.dtype.vector_3_float64)
         })
@@ -213,13 +210,13 @@ class DreamTest:
 
 
         # Use this to initialize the pixel coordinates
-        pixel_coords = sc.Variable(dims=[Dim.Position],
+        pixel_coords = sc.Variable(dims=['position'],
                                    values=pixel_positions,
                                    unit=sc.units.m, dtype=sc.dtype.vector_3_float64)
 
         if write_calibration:
-            self.cal["tzero"] = sc.Variable(dims=[Dim.Position], values=np.zeros(n_pixel_per_row*n_rows), unit=sc.units.us)
-            self.cal["difc"] = sc.Variable(dims=[Dim.Position], values=difc, unit=sc.units.us/sc.units.angstrom)
+            self.cal["tzero"] = sc.Variable(dims=['position'], values=np.zeros(n_pixel_per_row*n_rows), unit=sc.units.us)
+            self.cal["difc"] = sc.Variable(dims=['position'], values=difc, unit=sc.units.us/sc.units.angstrom)
 
         return pixel_coords
 
@@ -295,7 +292,7 @@ class DreamTest:
             raise ValueError("Provided wavelength band with negative wavelengths.")
 
         # get pixel theta:
-        positions = np.array(self.data.coords[Dim.Position].values)
+        positions = np.array(self.data.coords['position'].values)
         n_positions = (len(positions))
         z_dir = np.zeros((n_positions, 3))
         z_dir[:,2] = 1.0
@@ -352,7 +349,7 @@ class DreamTest:
                 # add some time uncertainty from pulse length (realistically it will be reduced by chopper settings)
                 event_times = travel_time + effective_pulse_length*np.random.randn(len(travel_time))
                 # Write the events to the pixel with the current pixel_id
-                self.data['sample'].coords[Dim.Tof][Dim.Position, pixel_id].values = event_times*1E6 # [s] -> [us] convert to us
+                self.data['sample'].coords['tof']['position', pixel_id].values = event_times*1E6 # [s] -> [us] convert to us
 
         end_time = time.time()
         print("Data was generated in " +  "%.2f" % (end_time - start_time) + " seconds.")
@@ -361,7 +358,7 @@ class DreamTest:
             sum_times = 0
             min_time = None
             max_time = 0
-            for array in np.array(self.data["sample"].coords[Dim.Tof].values):
+            for array in np.array(self.data["sample"].coords['tof'].values):
                 sum_times += len(array)
                 if len(array) > 0:
                     if min_time is None or np.min(array) < min_time:
@@ -375,7 +372,7 @@ class DreamTest:
                         print(array)
 
             #print(sum_times)
-            n_pixels_read = len(np.array(self.data["sample"].coords[Dim.Tof].values))
+            n_pixels_read = len(np.array(self.data["sample"].coords['tof'].values))
             print("Distributed " + str(sum_times) + " events into " + str(n_pixels_read) + " pixels.")
             print("Minimum time recorded: " + "%.0f" % min_time + " us")
             print("Maximum time recorded: " + "%.0f" % max_time + " us")
