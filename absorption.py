@@ -40,17 +40,3 @@ def absorption_correction(data_array, filename, lambda_binning=(0.7, 10.35, 5615
     return sc.neutron.from_mantid(ws_correction)
 
 
-#========================================
-if __name__ == "__main__":
-    fname = "wish_test.nxs"
-    dataset = sc.neutron.load(fname)
-
-    correction = absorption_correction(dataset, fname,
-                    ScatterFrom="Sample",
-                    CylinderSampleHeight=1,
-                    CylinderSampleRadius=1)
-
-    corr_tof = sc.neutron.convert(correction, "Wavelength", "Tof")
-    corrected = dataset/corr_tof
-
-    print(corrected)
