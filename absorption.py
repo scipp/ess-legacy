@@ -2,7 +2,7 @@ import scipp as sc
 import mantid.simpleapi as simpleapi
 
 
-def absorption_correction(data_array, filename, lambda_binning=(0.7, 10.35, 5615), **mantid_args):
+def absorption_correction(filename, lambda_binning=(0.7, 10.35, 5615), **mantid_args):
     """
     This method is a straightforward wrapper exposing CylinderAbsorption through scipp
 
@@ -15,7 +15,6 @@ def absorption_correction(data_array, filename, lambda_binning=(0.7, 10.35, 5615
 
     Parameters
     ----------
-    data_array: Scipp dataset with sample defined
     filename: Path to the file with data
     lambda_binning: min, max and number of steps for binning in wavelength
     mantid_args: additional arguments to be passed to Mantid's CylinderAbsorption method.
@@ -27,16 +26,16 @@ def absorption_correction(data_array, filename, lambda_binning=(0.7, 10.35, 5615
     """
 
     # Create empty workspace with proper dimensions.
-    ws = simpleapi.LoadEventNexus(filename,
-        MetaDataOnly=True, LoadMonitors=False, LoadLogs=False)
-    ws.getAxis(0).setUnit('Wavelength')
+    workspace = simpleapi.LoadEventNexus(filename,
+                                         MetaDataOnly=True,
+                                         LoadMonitors=False,
+                                         LoadLogs=False)
+    workspace.getAxis(0).setUnit('Wavelength')
 
     # Rebin the resulting correction based on default WISH binning
     lambda_min, lambda_max, number_bins = lambda_binning
-    ws = simpleapi.Rebin(ws, params=[lambda_min, number_bins, lambda_max])
+    workspace = simpleapi.Rebin(workspace, params=[lambda_min, number_bins, lambda_max])
 
-    ws_correction = simpleapi.CylinderAbsorption(ws, **mantid_args)
+    correction = simpleapi.CylinderAbsorption(workspace, **mantid_args)
 
-    return sc.neutron.from_mantid(ws_correction)
-
-
+    return sc.neutron.from_mantid(correction)
