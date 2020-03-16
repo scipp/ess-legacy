@@ -1,5 +1,4 @@
 import scipp as sc
-from scipp import Dim
 
 
 def powder_reduction_convert_with_cal(data, calibration=None):
@@ -22,7 +21,7 @@ def powder_reduction_convert_with_cal(data, calibration=None):
 
     if calibration is None:
         # No calibration data, use standard convert algorithm
-        dspacing = sc.neutron.convert(data, Dim.Tof, Dim.DSpacing)
+        dspacing = sc.neutron.convert(data, 'tof', 'd-spacing')
     else:
         # Calculate dspacing from calibration file
         dspacing = sc.neutron.diffraction.convert_with_calibration(data,
