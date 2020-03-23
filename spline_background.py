@@ -43,10 +43,9 @@ def bspline_background(variable, dim, smoothing_factor=None):
     if len(x_values) == len(values)+1:
         bin_edge_input = True
 
-        new_x_values = [0.5*(x_values[i] + x_values[i+1])
-                        for i in range(len(x_values)-1)]
-        x_values = new_x_values
-
+        new_x_values = 
+        x_values = 0.5*(x_values[:-1] + x_values[1:])
+                        
     # find out the knots and splines.
     knots, u = interpolate.splprep([x_values, values],
                                    s=smoothing_factor,
