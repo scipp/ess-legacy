@@ -57,16 +57,18 @@ def bspline_background(variable, dim, smoothing_factor=None):
     # cast splined into DataArray type
     if bin_edge_input:
         # redefine output x_values to be 'bin-edges'
-        len_splined = len(splined[0])
-        bin_edge_output_x = np.zeros(len_splined + 1)
-        bin_edge_output_x[0] = 0.5*(splined[0][0] - splined[0][1])
-        bin_edge_output_x[len_splined] = 0.5*(
-                                         3*splined[0][len_splined-1] -
-                                         splined[0][len_splined-2])
+        bin_centres = splined[0]
+        # add values at the boundaries to calculate bin edges
+        bin_centres = np.append(bin_centres, 
+                                2.*bin_centres[-1] - bin_centres[-2])
+        bin_centres = np.insert(bin_centres, 
+                                0, 
+                                2.*bin_centres[0] - bin_centres[1], 
+                                axis=0)
 
-        for i in range(len_splined-1):
-            bin_edge_output_x[i+1] = 0.5*(splined[0][i+1] + splined[0][i])
-
+        # calculate bin_edges
+        bin_edge_output_x = bin_centres[:-1] + np.diff(bin_centres)/2
+        
         output_x = sc.Variable(dims=[dim], values=bin_edge_output_x)
     else:
         output_x = sc.Variable(dims=[dim], values=splined[0])
