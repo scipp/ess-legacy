@@ -65,7 +65,7 @@ def bspline_background(variable, dim, smoothing_factor=None):
                                          splined[0][len_splined-2])
 
         for i in range(len_splined-1):
-            bin_edge_output_x[i+1] = 0.5*(splined[0][i+1] - splined[0][i])
+            bin_edge_output_x[i+1] = 0.5*(splined[0][i+1] + splined[0][i])
 
         output_x = sc.Variable(dims=[dim], values=bin_edge_output_x)
     else:
