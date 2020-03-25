@@ -54,20 +54,27 @@ def powder_reduction(sample='sample.nxs',
     dspacing_binning: min, max and number of steps for binning in d-spacing
                       min and max are in Angstroms
 
-    **absorp: dictionary containing information to correct absorption 
+    **absorp: dictionary containing information to correct absorption for Sample and
+              Vanadium.
+              There could be only up to two elements related to the correction for Vanadium: 
+              the radius and height of the cylindrical sample shape.
+              To distinguish them from the inputs related to the sample, their names in the 
+              dictionary  are 'CylinderVanadiumRadius' and 'CylinderVanadiumHeight'. The other keys
+              of the 'absorp' dictionary follow Mantid's syntax and are related to the sample data 
+              only.    
               see help of Mantid's algorithm CylinderAbsorption for details
               https://docs.mantidproject.org/nightly/algorithms/CylinderAbsorption-v1.html
 
     Returns
     -------
     Scipp dataset containing reduced data in d-spacing
-    
+
     Hints
     -----
-    
+
     To plot the output data, one can histogram in d-spacing and sum according to groups
     using scipp.histogram and sc.sum, respectively.
-   
+
     """
     # Load counts
     sample_data = sc.neutron.load(sample,
@@ -100,14 +107,14 @@ def powder_reduction(sample='sample.nxs',
     # correction (like in the real WISH workflow).
 
     # Select fourth monitor and convert from tof to wavelength
-    mon4_lambda = sc.neutron.convert(sample_data.attrs['monitor4'].values, 
+    mon4_lambda = sc.neutron.convert(sample_data.attrs['monitor4'].values,
                                      'tof', 'wavelength')
 
     # Spline background
     mon4_spline_background = bspline_background(mon4_lambda,
                                                 sc.Dim('wavelength'),
                                                 smoothing_factor=70)
-    
+
     # Smooth monitor
     mon4_smooth = smooth_data(mon4_spline_background,
                               dim='wavelength',
@@ -134,13 +141,20 @@ def powder_reduction(sample='sample.nxs',
     del mon_rebin, mon4_smooth
 
     # 2. absorption correction
-    # TODO: adapt for different number of inputs
     if bool(absorp):
+        # Copy dictionary of absorption parameters 
+        absorp_sample = absorp.copy()
+        # Remove input related to Vanadium if present in absorp dictionary
+        found_vana_info = [key for key in absorp_sample.keys() if 'Vanadium' in key]
+
+        for item in found_vana_info:
+            absorp_sample.pop(item, None)
+
+        # Calculate absorption correction for sample data
         correction = absorption_correction(sample,
                                            lambda_binning,
-                                           CylinderSampleHeight=absorp['height'],
-                                           CylinderSampleRadius=absorp['radius'])
-   
+                                           **absorp_sample)
+
         # the 3 following lines of code are to place info about source and sample
         # position at the right place in the correction dataArray in order to
         # proceed to the normalization
@@ -152,7 +166,7 @@ def powder_reduction(sample='sample.nxs',
         sample_lambda /= correction
 
         del correction
-        
+
     del sample_data
 
     sample_tof = sc.neutron.convert(sample_lambda, 'wavelength', 'tof')
@@ -179,7 +193,7 @@ def powder_reduction(sample='sample.nxs',
     # 5. Vanadium correction (requires Vanadium and Empty instrument)
     if vanadium is not None and empty_instr is not None:
         print("Proceed with reduction of Vanadium data ")
-
+        
         vana_red_focused = process_vanadium_data(vanadium,
                                                  empty_instr,
                                                  lambda_binning,
@@ -285,7 +299,9 @@ def process_vanadium_data(vanadium, empty_instr,
     calibration: calibration file
                  Mantid format
 
-    **absorp: dictionary containing information to correct absorption 
+    **absorp: dictionary containing information to correct absorption for sample and vanadium
+              only the inputs related to Vanadium will be selected to calculate the correction
+              see docstrings of powder_reduction for more details
               see help of Mantid's algorithm CylinderAbsorption for details
               https://docs.mantidproject.org/nightly/algorithms/CylinderAbsorption-v1.html
 
@@ -300,11 +316,22 @@ def process_vanadium_data(vanadium, empty_instr,
 
     # Absorption correction applied
     if bool(absorp):
+        # The values of number_density, scattering and attenuation are hard-coded since they must
+        # correspond to Vanadium. Only radius and height of the Vanadium cylindrical sample
+        # shape can be set. The names of these inputs if present have to be renamed to match
+        # the requirements of Mantid's algorithm CylinderAbsorption
+
+        #  Create dictionary to calculate absorption correction for Vanadium.
+        absorp_vana = {key.replace('Vanadium', 'Sample'): value for key, value in absorp.items()
+                       if 'Vanadium' in key}
+        absorp_vana['SampleNumberDensity'] = 0.07118
+        absorp_vana['ScatteringXSection'] = 5.16
+        absorp_vana['AttenuationXSection'] = 4.8756
+
         correction = absorption_correction(vanadium,
                                            lambda_binning,
-                                           CylinderSampleHeight=absorp['height'],
-                                           CylinderSampleRadius=absorp['radius'])
-        
+                                           **absorp_vana)
+
         # the 3 following lines of code are to place info about source and sample
         # position at the right place in the correction dataArray in order to
         # proceed to the normalization
@@ -322,7 +349,7 @@ def process_vanadium_data(vanadium, empty_instr,
         vana_red /= correction
 
         del correction
-        
+
     # convert to TOF
     vana_red_tof = sc.neutron.convert(vana_red, 'wavelength', 'tof')
 
@@ -358,13 +385,15 @@ def process_vanadium_data(vanadium, empty_instr,
 
     groupvana = gvana.min('detector')
 
-    assert groupvana == gvana.max('detector'), "Calibration table has mismatching group for detectors in same spectrum"
+    assert groupvana == gvana.max('detector'), \
+        xs"Calibration table has mismatching group for detectors in same spectrum"
 
     vana_rebin.coords['group'] = groupvana.data
     vana_rebin.masks['mask'] = maskvana.data
 
-    # Mask negative measured values            
-    vana_rebin.masks['negative_bins'] = sc.Variable(dims=['spectrum', 'd-spacing'], values=np.less(vana_rebin.values, 0.0))
+    # Mask negative measured values
+    vana_rebin.masks['negative_bins'] = sc.Variable(dims=['spectrum', 'd-spacing'],
+                                                    values=np.less(vana_rebin.values, 0.0))
 
     # Focus
     focused_vana = sc.groupby(vana_rebin, group='group').flatten('spectrum')
@@ -374,16 +403,33 @@ def process_vanadium_data(vanadium, empty_instr,
 
 if __name__ == "__main__":
 
-    # The value 5615 for the number of bins in wavelength corresponds to the value in Mantid after rebinning
+    # The value 5615 for the number of bins in wavelength corresponds to the value in Mantid
+    # after rebinning 
     sample_file = 'WISH00043525.nxs'
     cal_file = "WISH_cycle_15_4_noends_10to10_dodgytube_removed_feb2016.cal"
     vanadium_file = 'WISH00019612.nxs'
     empty_instrument_file = 'WISH00019618.nxs'
-    focused_hist = powder_reduction(sample=sample_file,
-                                    calibration=cal_file,
-                                    vanadium=vanadium_file,
-                                    empty_instr=empty_instrument_file,
-                                    lambda_binning=(0.7, 10.35, 5615),
-                                    dspacing_binning=(1., 10., 9000),
-                                    height=4.0,
-                                    radius=0.55)
+    input_for_absorption = {'AttenuationXSection': 2.595,
+                            'ScatteringXSection': 5.463,
+                            'SampleNumberDensity': 0.025,
+                            'CylinderSampleRadius': 4.,
+                            'CylinderSampleHeight': 0.55,
+                            'CylinderVanadiumRadius': 4.,
+                            'CylinderVanadiumHeight': 0.55}
+
+    focused = powder_reduction(sample=sample_file,
+                               calibration=cal_file,
+                               vanadium=vanadium_file,
+                               empty_instr=empty_instrument_file,
+                               lambda_binning=(0.7, 10.35, 5615),
+                               dspacing_binning=(1., 10., 9000),
+                               **input_for_absorption)
+
+    # #to plot the data, one could histogram in d-spacing
+    # dmin, dmax, numbers_bins_d = (1., 10., 9000)
+    # dspacing_bins = sc.Variable(['d-spacing'],
+    #                              values = np.linspace(dmin, dmax, numbers_bins_d)
+    #                              unit=sc.units.angstrom)
+    # focused_hist = sc.histogram(focused, dspacing_bins)
+    # from scipp.plot import plot
+    # plot(focused_hist['group', 4]) # to plot data for the 5th group
