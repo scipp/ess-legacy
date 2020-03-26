@@ -16,8 +16,11 @@ def absorption_correction(filename, lambda_binning=(0.7, 10.35, 5615), **mantid_
     Parameters
     ----------
     filename: Path to the file with data
+
     lambda_binning: min, max and number of steps for binning in wavelength
-    mantid_args: additional arguments to be passed to Mantid's CylinderAbsorption method.
+    
+    mantid_args: additional arguments to be passed to Mantid's
+                 CylinderAbsorption method.
 
     Returns
     -------
@@ -34,7 +37,10 @@ def absorption_correction(filename, lambda_binning=(0.7, 10.35, 5615), **mantid_
 
     # Rebin the resulting correction based on default WISH binning
     lambda_min, lambda_max, number_bins = lambda_binning
-    workspace = simpleapi.Rebin(workspace, params=[lambda_min, number_bins, lambda_max])
+    bin_width = (lambda_max - lambda_min)/number_bins
+    workspace = simpleapi.Rebin(workspace,
+                                params=[lambda_min, bin_width, lambda_max],
+                                FullBinsOnly=True)
 
     correction = simpleapi.CylinderAbsorption(workspace, **mantid_args)
 
