@@ -1,4 +1,9 @@
+# Files
 *.txt
 *.pyc
 scippconfig.py
+
+# Folders
 .DS_Store
+.ipynm_checkpoints/
+.idea/
