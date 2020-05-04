@@ -129,13 +129,18 @@ def powder_reduction(sample='sample.nxs',
 
     # Rebin monitors' data
     lambda_min, lambda_max, number_bins = lambda_binning
+
+    edges_lambda = sc.Variable(['wavelength'],
+                               unit=sc.units.angstrom,
+                               values=np.linspace(lambda_min,
+                                                  lambda_max,
+                                                  num=number_bins))
     mon_rebin = sc.rebin(mon4_smooth,
                          'wavelength',
-                         sc.Variable(['wavelength'],
-                                     unit=sc.units.angstrom,
-                                     values=np.linspace(lambda_min,
-                                                        lambda_max,
-                                                        num=number_bins)))
+                         edges_lambda)
+
+    # Realign sample data
+    sample_lambda.realign({'wavelength': edges_lambda})
     sample_lambda /= mon_rebin
 
     del mon_rebin, mon4_smooth
@@ -163,9 +168,11 @@ def powder_reduction(sample='sample.nxs',
         del correction.coords['sample_position']
         del correction.coords['position']
 
-        sample_lambda /= correction
+        correction_rebin = sc.rebin(correction, 'wavelength', edges_lambda)
 
-        del correction
+        sample_lambda /= correction_rebin
+
+        del correction, correction_rebin
 
     del sample_data
 
@@ -186,7 +193,7 @@ def powder_reduction(sample='sample.nxs',
     # 4. Focus panels
     # Assuming sample is in d-spacing: Focus into groups
 
-    focused = sc.groupby(sample_dspacing, group='group').flatten('spectrum')
+    focused = sc.groupby(sample_dspacing.unaligned, group='group').flatten('spectrum')
 
     del sample_dspacing
 
@@ -208,7 +215,18 @@ def powder_reduction(sample='sample.nxs',
 
         vana_red_focused.coords['detector_info'] = focused.coords['detector_info'].copy()
 
-        focused /= vana_red_focused
+        # realign vanadium and sample data in d-space
+        dmin, dmax, number_bins_d = dspacing_binning
+
+        edges_dspacing = sc.Variable(['d-spacing'],
+                                     values=np.linspace(dmin, dmax, number_bins_d),
+                                     unit=sc.units.angstrom)
+
+        focused.realign({'d-spacing': edges_dspacing})
+        vana_red_focused.realign({'d-spacing': edges_dspacing})
+
+        # normalize by rebinned vanadium
+        focused /= sc.histogram(vana_red_focused)  # focused /= vana_red_focused
 
         del vana_red_focused
 
@@ -250,30 +268,29 @@ def process_event_data(file, lambda_binning):
     # normalize to monitor
     lambda_min, lambda_max, number_bins = lambda_binning
 
+    edges_lambda = sc.Variable(['wavelength'],
+                               unit=sc.units.angstrom,
+                               values=np.linspace(lambda_min,
+                                                  lambda_max,
+                                                  num=number_bins))
+
     mon_rebin = sc.rebin(mon4_smooth,
                          'wavelength',
-                         sc.Variable(['wavelength'],
-                                     unit=sc.units.angstrom,
-                                     values=np.linspace(lambda_min,
-                                                        lambda_max,
-                                                        num=number_bins)))
+                         edges_lambda)
 
     del mon4_smooth
+
+    event_lambda.realign({'wavelength': edges_lambda})
 
     event_lambda /= mon_rebin
 
     del mon_rebin
 
-    edges_lambda = sc.Variable(['wavelength'],
-                               values=np.linspace(lambda_min, lambda_max, number_bins),
-                               unit=sc.units.angstrom)
-    event_histo = sc.histogram(event_lambda, edges_lambda)
-
-    return event_histo
+    return event_lambda
 
 
 def process_vanadium_data(vanadium, empty_instr,
-                          lambda_binning, dspacing_binning,
+                          lambda_binning,  # dspacing_binning,
                           calibration=None, **absorp):
     """
     Create corrected vanadium dataset
@@ -360,14 +377,14 @@ def process_vanadium_data(vanadium, empty_instr,
 
     del vana_red_tof
 
-    # rebin vanadium
-    dmin, dmax, number_bins_d = dspacing_binning
-    dspacing_bins = sc.Variable(['d-spacing'],
-                                values=np.linspace(dmin, dmax, number_bins_d),
-                                unit=sc.units.angstrom)
-    vana_rebin = sc.rebin(vana_dspacing, 'd-spacing', dspacing_bins)
+    # # rebin vanadium
+    # dmin, dmax, number_bins_d = dspacing_binning
+    # dspacing_bins = sc.Variable(['d-spacing'],
+    #                            values=np.linspace(dmin, dmax, number_bins_d),
+    #                            unit=sc.units.angstrom)
+    # vana_rebin = sc.rebin(vana_dspacing, 'd-spacing', dspacing_bins)
 
-    del vana_dspacing
+    # del vana_dspacing
 
     # Calibration
     # Load
@@ -375,7 +392,7 @@ def process_vanadium_data(vanadium, empty_instr,
     calvana = load_calibration(calibration, mantid_args=input_load_cal)
     # Merge table with detector->spectrum mapping from vanadium
     # (implicitly checking that detectors between vanadium and calibration are the same)
-    cal_vana = sc.merge(calvana, vana_rebin.coords['detector_info'].value)
+    cal_vana = sc.merge(calvana, vana_dspacing.coords['detector_info'].value)
 
     # Compute spectrum mask from detector mask
     maskvana = sc.groupby(cal_vana['mask'], group='spectrum').any('detector')
@@ -386,17 +403,17 @@ def process_vanadium_data(vanadium, empty_instr,
     groupvana = gvana.min('detector')
 
     assert groupvana == gvana.max('detector'), \
-        xs"Calibration table has mismatching group for detectors in same spectrum"
+        "Calibration table has mismatching group for detectors in same spectrum"
 
-    vana_rebin.coords['group'] = groupvana.data
-    vana_rebin.masks['mask'] = maskvana.data
+    vana_dspacing.coords['group'] = groupvana.data
+    vana_dspacing.masks['mask'] = maskvana.data
 
-    # Mask negative measured values
-    vana_rebin.masks['negative_bins'] = sc.Variable(dims=['spectrum', 'd-spacing'],
-                                                    values=np.less(vana_rebin.values, 0.0))
+    # # Mask negative measured values
+    # vana_rebin.masks['negative_bins'] = sc.Variable(dims=['spectrum', 'd-spacing'],
+    #                                                 values=np.less(vana_rebin.values, 0.0))
 
     # Focus
-    focused_vana = sc.groupby(vana_rebin, group='group').flatten('spectrum')
+    focused_vana = sc.groupby(vana_dspacing.unaligned, group='group').flatten('spectrum')
 
     return focused_vana
 
@@ -428,8 +445,7 @@ if __name__ == "__main__":
     # #to plot the data, one could histogram in d-spacing
     # dmin, dmax, numbers_bins_d = (1., 10., 9000)
     # dspacing_bins = sc.Variable(['d-spacing'],
-    #                              values = np.linspace(dmin, dmax, numbers_bins_d)
-    #                              unit=sc.units.angstrom)
+    #                             values=np.linspace(dmin, dmax, numbers_bins_d),
+    #                             unit=sc.units.angstrom)
     # focused_hist = sc.histogram(focused, dspacing_bins)
-    # from scipp.plot import plot
-    # plot(focused_hist['group', 4]) # to plot data for the 5th group
+    # sc.plot.plot(focused_hist['group', 4])  # to plot data for the 5th group
