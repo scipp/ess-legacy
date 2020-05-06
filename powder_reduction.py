@@ -172,8 +172,6 @@ def powder_reduction(sample='sample.nxs',
 
         sample_lambda /= correction_rebin
 
-        del correction, correction_rebin
-
     del sample_data
 
     sample_tof = sc.neutron.convert(sample_lambda, 'wavelength', 'tof')
@@ -377,15 +375,6 @@ def process_vanadium_data(vanadium, empty_instr,
 
     del vana_red_tof
 
-    # # rebin vanadium
-    # dmin, dmax, number_bins_d = dspacing_binning
-    # dspacing_bins = sc.Variable(['d-spacing'],
-    #                            values=np.linspace(dmin, dmax, number_bins_d),
-    #                            unit=sc.units.angstrom)
-    # vana_rebin = sc.rebin(vana_dspacing, 'd-spacing', dspacing_bins)
-
-    # del vana_dspacing
-
     # Calibration
     # Load
     input_load_cal = {'InstrumentFilename': 'WISH_Definition.xml'}
@@ -407,10 +396,6 @@ def process_vanadium_data(vanadium, empty_instr,
 
     vana_dspacing.coords['group'] = groupvana.data
     vana_dspacing.masks['mask'] = maskvana.data
-
-    # # Mask negative measured values
-    # vana_rebin.masks['negative_bins'] = sc.Variable(dims=['spectrum', 'd-spacing'],
-    #                                                 values=np.less(vana_rebin.values, 0.0))
 
     # Focus
     focused_vana = sc.groupby(vana_dspacing.unaligned, group='group').flatten('spectrum')
