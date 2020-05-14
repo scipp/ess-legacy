@@ -1,4 +1,4 @@
 *.txt
 *.pyc
-config.py
+*config.py
 .DS_Store
