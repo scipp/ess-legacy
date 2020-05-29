@@ -69,9 +69,9 @@ def bspline_background(variable, dim, smoothing_factor=None):
         # calculate bin_edges
         bin_edge_output_x = bin_centres[:-1] + np.diff(bin_centres)/2
         
-        output_x = sc.Variable(dims=[dim], values=bin_edge_output_x)
+        output_x = sc.Variable(dims=[dim], values=bin_edge_output_x, unit=variable.coords[dim].unit)
     else:
-        output_x = sc.Variable(dims=[dim], values=splined[0])
+        output_x = sc.Variable(dims=[dim], values=splined[0], unit=variable.coords[dim].unit)
 
     output_y = sc.Variable(dims=[dim], values=splined[1])
     output_data = sc.DataArray(data=output_y, coords={dim: output_x})
