@@ -12,13 +12,9 @@ def read_x_values(tof_file):
     """
     Reads the TOF values from the CSV into a list
     """
-    tof_values = []
-    with open(tof_file) as fh:
-        csv_reader = csv.reader(fh, delimiter='\t')
-        next(csv_reader, None)  # skip header
-        for row in csv_reader:
-            tof_values.append(float(row[1]))
-    return tof_values
+    return np.loadtxt(tof_file, delimiter='\t',
+                      skiprows=1,  # Skip header on the first line
+                      usecols=1)  # Only use the TOF vals, not index
 
 
 def _load_tiffs(tiff_dir):
@@ -96,17 +92,21 @@ def stitch(data_array, frame_parameters, frame_shifts, rebin_parameters):
     """
     frames = []
 
-    rebin_params = sc.Variable(["tof"], values=np.arange(*rebin_parameters,
-                                                           dtype=np.float64))
+    rebin_params = sc.Variable(["tof"], unit=sc.units.us,
+                               values=np.arange(
+                                   start=rebin_parameters["start"],
+                                   stop=rebin_parameters["stop"],
+                                   step=rebin_parameters["width"],
+                                   dtype=np.float64))
 
     for i, (slice_bins, shift_parameter) in enumerate(
             zip(frame_parameters, frame_shifts)):
-        bins = sc.Variable(["tof"],
+        bins = sc.Variable(["tof"], unit=sc.units.us,
                            values=np.arange(*slice_bins, dtype=np.float64))
         # Rebins the whole data to crop it to frame bins
         rebinned = sc.rebin(data_array, "tof", bins)
         # Shift the frame backwards to make all frames overlap
-        rebinned.coords["tof"] += shift_parameter
+        rebinned.coords["tof"] += sc.Variable(shift_parameter, unit=sc.units.us)
         # Rebin to overarching coordinates so that the frame coordinates align
         rebinned = sc.rebin(rebinned, "tof", rebin_params)
 
@@ -122,23 +122,9 @@ def make_detector_groups(nx_original, ny_original, nx_target, ny_target):
     element_width_x = nx_original // nx_target
     element_width_y = ny_original // ny_target
 
-    # To contain our new spectra mappings
-    grid = np.zeros((nx_original, ny_original), dtype=np.float64)
-
-    for i in range(0, nx_target):
-        x_start = i * element_width_x
-        x_end = (i + 1) * element_width_x
-
-        for j in range(0, ny_target):
-            y_start = j * element_width_y
-            y_end = (j + 1) * element_width_y
-
-            vals = np.full((element_width_x, element_width_y),
-                           i + j * nx_target, dtype=np.float64)
-            grid[x_start:x_end, y_start:y_end] = vals
-
-    return sc.Variable(["spectrum"], values=grid.ravel())
-
-
-def apply_median_filter(dataset, variable_key, bank_width):
-    pass
+    x = sc.Variable(dims=['x'],
+                    values=np.arange(nx_original)) / element_width_x
+    y = sc.Variable(dims=['y'],
+                    values=np.arange(ny_original)) / element_width_y
+    grid = x + nx_target * y
+    return grid

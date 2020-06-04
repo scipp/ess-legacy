@@ -1,3 +1,3 @@
-from .operations import integrate, generate_neighbouring_spectra
+from .operations import generate_neighbouring_spectra
 
-__all__ = ["integrate", "generate_neighbouring_spectra"]
+__all__ = ["generate_neighbouring_spectra"]

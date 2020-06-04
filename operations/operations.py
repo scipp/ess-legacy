@@ -5,18 +5,6 @@ from typing import Dict, List
 import scipp as sc
 
 
-def integrate(dataset: sc.Dataset):
-    integrated = sc.Dataset()
-    for dim in dataset.coords.keys():
-        integrated.coords[dim] = dataset.coords[dim]
-
-    for k in dataset.keys():
-        integrated[k] = sc.sum(dataset[k], "tof")
-
-    return integrated
-
-
-
 def _calc_adj_spectra(center_spec_num, bank_width, num_spectra):
     col_positions = [-1, 0, 1]  # Take relative positions of col
 
