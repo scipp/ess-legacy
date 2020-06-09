@@ -1,3 +1,3 @@
-from .operations import generate_neighbouring_spectra
+from .operations import mask_from_adj_pixels
 
-__all__ = ["generate_neighbouring_spectra"]
+__all__ = ["mask_from_adj_pixels"]
