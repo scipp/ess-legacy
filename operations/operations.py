@@ -13,7 +13,13 @@ def mask_from_adj_pixels(mask, bank_width):
     If all adj. pixels are then the pixel considered is set to True
     If no adj. pixels are then the pixel considered is set to False
     If surrounding pixels have a mix of True/False the val is left as-is
-    This function handles border pixels as if they are "wildcard" values
+
+    This function handles border pixels as if they aren't there. So that
+    the following happens:
+    ------------------------
+    |F|T|     ->      |T|T|
+    |T|T|             |T|T|
+    -----------------------
 
     Parameters
     ----------
