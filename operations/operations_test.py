@@ -9,12 +9,10 @@ class OperationsTest(unittest.TestCase):
     @staticmethod
     def _run_test(val_in):
         test_input = np.array(val_in)
-        bank_width = test_input.shape[0]
 
         # Flatten to 1D input for the moment
-        test_input = sc.Variable(["spectrum"], values=test_input.ravel())
-        returned = operations.mask_from_adj_pixels(test_input, bank_width)
-        return sc.reshape(returned, ["x", "y"], (bank_width, bank_width))
+        test_input = sc.Variable(["y", "x"], values=test_input)
+        return operations.mask_from_adj_pixels(test_input)
 
     def test_center_true(self):
         input_data = [[True, True, True],

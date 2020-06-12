@@ -38,7 +38,8 @@ def _load_tiffs(tiff_dir):
     return np.array(stack)
 
 
-def export_tiff_stack(dataset, key, base_name, output_dir, x_len, y_len):
+def export_tiff_stack(dataset, key, base_name, output_dir, x_len, y_len,
+                      tof_values):
     to_save = dataset[key]
 
     num_bins = 1 if len(to_save.shape) == 1 else to_save.shape[0]
@@ -55,12 +56,7 @@ def export_tiff_stack(dataset, key, base_name, output_dir, x_len, y_len):
     print('Saved {:s}_{:04d}.tiff stack.'.format(base_name, 0))
 
     # Write out tofs as CSV
-
-    if num_bins == 1:
-        dataset_tof = dataset.coords["tof"].values
-        tof_vals = [dataset_tof[0], dataset_tof[-1]]
-    else:
-        tof_vals = to_save.coords["tof"].values
+    tof_vals = [tof_values[0], tof_values[-1]] if num_bins == 1 else tof_values
 
     with open(os.path.join(output_dir, 'tof_of_tiff_{}.txt'.format(base_name)),
               'w') as tofs:
@@ -93,10 +89,10 @@ def stitch(data_array, frame_parameters, frame_shifts, rebin_parameters):
     frames = []
 
     rebin_params = sc.Variable(["tof"], unit=sc.units.us,
-                               values=np.arange(
+                               values=np.linspace(
                                    start=rebin_parameters["start"],
                                    stop=rebin_parameters["stop"],
-                                   step=rebin_parameters["width"],
+                                   num=rebin_parameters["num_bins"],
                                    dtype=np.float64))
 
     for i, (slice_bins, shift_parameter) in enumerate(

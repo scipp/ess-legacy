@@ -4,7 +4,7 @@ import numpy as np
 import scipp as sc
 
 
-def mask_from_adj_pixels(mask, bank_width):
+def mask_from_adj_pixels(mask):
     """
     Checks if the adjacent pixels (in 8 directions) are masked to remove
     any noisy pixels which are erroneously masked or unmasked compared to
@@ -24,7 +24,6 @@ def mask_from_adj_pixels(mask, bank_width):
     Parameters
     ----------
     mask: Existing mask with some positions masked
-    bank_width: The width of each bank to reshape into 2D
 
     Returns
     -------
@@ -41,7 +40,6 @@ def mask_from_adj_pixels(mask, bank_width):
             return sc.concatenate(var[dim, 1:], fill, dim)
 
     mask = mask.copy()
-    mask = sc.reshape(mask, dims=["y", "x"], shape=(bank_width, bank_width))
 
     def make_flip(fill):
         flip = sc.Variable(dims=['neighbor', 'y', 'x'],
@@ -58,9 +56,7 @@ def mask_from_adj_pixels(mask, bank_width):
     mask = mask | sc.all(make_flip(True), 'neighbor')
     # unmask if no neighbor masked
     mask = mask & sc.any(make_flip(False), 'neighbor')
-
-    # Flatten using numpy, avoids #1192
-    return sc.Variable(["spectrum"], values=mask.values.ravel())
+    return mask
 
 
 def _calc_adj_spectra(center_spec_num, bank_width, num_spectra):
