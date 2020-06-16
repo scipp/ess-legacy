@@ -42,3 +42,24 @@ class LoKI:
         return sc.reshape(layers,
                           dims=[self._dim],
                           shape=(layers.values.size, )).copy()
+
+    def to_logical_dims(self, data):
+        """
+        Reshape data to use ['tube','straw','pixel'] instead of ['spectrum'].
+        """
+        import scipp as sc
+        dims = data.dims
+        shape = data.shape
+        if dims[0] != 'spectrum':
+            raise RuntimeError("Expected 'spectrum' to be outer dim of data")
+        dims[0:1] = ['tube', 'straw', 'pixel']
+        shape[0:1] = [self._ntube, self._nstraw, self._npixel]
+        coords = {
+            dim: coord.copy()
+            for dim, coord in data.coords.items()
+            if not 'spectrum' in coord.dims
+        }
+        return sc.DataArray(data=sc.reshape(data.data,
+                                            dims=dims,
+                                            shape=tuple(shape)),
+                            coords=coords)
