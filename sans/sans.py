@@ -4,6 +4,23 @@ import scipp as sc
 import contrib
 
 
+def project_xy(data, nx=100, ny=20):
+    z = sc.geometry.z(sc.neutron.position(data))
+    x = sc.geometry.x(sc.neutron.position(data)) / z
+    y = sc.geometry.y(sc.neutron.position(data)) / z
+    data.coords['x/z'] = x
+    data.coords['y/z'] = y
+    x = sc.Variable(dims=['x/z'],
+                    values=np.linspace(sc.min(x).value,
+                                       sc.max(x).value,
+                                       num=nx))
+    y = sc.Variable(dims=['y/z'],
+                    values=np.linspace(sc.min(y).value,
+                                       sc.max(y).value,
+                                       num=ny))
+    return sc.realign(data, coords={'y/z': y, 'x/z': x})
+
+
 def solid_angle(data):
     # TODO proper solid angle
     # [0.0117188,0.0075,0.0075] bounding box size
