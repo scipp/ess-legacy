@@ -30,7 +30,7 @@ def solid_angle(data):
     return (pixel_size * pixel_length) / (L2 * L2)
 
 
-def background_mean(data, dim, begin, end):
+def subtract_background_mean(data, dim, begin, end):
     coord = data.coords[dim]
     assert (coord.unit == begin.unit) and (coord.unit == end.unit)
     i = np.searchsorted(coord, begin.value)
@@ -38,10 +38,24 @@ def background_mean(data, dim, begin, end):
     return data - sc.mean(data[dim, i:j], dim)
 
 
-def transmission_fraction(incident_beam, transmission):
+def transmission_fraction(sample, direct, wavelength_bins):
     # Approximation based on equations in CalculateTransmission documentation
-    # TODO proper implementation of mantid.CalculateTransmission
-    return (transmission / transmission) * (incident_beam / incident_beam)
+    # p = \frac{S_T}{D_T}\frac{D_I}{S_I}
+    # This is equivalent to mantid.CalculateTransmission without fitting
+    def setup(data, begin, end):
+        background = subtract_background_mean(data, 'tof', begin, end)
+        del background.coords[
+            'sample-position']  # ensure unit conversion treats this a monitor
+        background = sc.neutron.convert(background, 'tof', 'wavelength')
+        background = sc.rebin(background, 'wavelength', wavelength_bins)
+        return background
+
+    us = sc.units.us
+    sample_incident = setup(sample['spectrum', 0], 40000.0 * us, 99000.0 * us)
+    sample_trans = setup(sample['spectrum', 3], 88000.0 * us, 98000.0 * us)
+    direct_incident = setup(direct['spectrum', 0], 40000.0 * us, 99000.0 * us)
+    direct_trans = setup(direct['spectrum', 3], 88000.0 * us, 98000.0 * us)
+    return (sample_trans / direct_trans) * (direct_incident / sample_incident)
     #CalculateTransmission(SampleRunWorkspace=transWsTmp,
     #                      DirectRunWorkspace=transWsTmp,
     #                      OutputWorkspace=outWsName,
@@ -51,29 +65,11 @@ def transmission_fraction(incident_beam, transmission):
     #                      PolynomialOrder=3, OutputUnfittedData=True)
 
 
-def extract_monitor_background(data, begin, end, wavelength_bins):
-    background = background_mean(data, 'tof', begin, end)
-    del background.coords[
-        'sample-position']  # ensure unit conversion treats this a monitor
-    background = sc.neutron.convert(background, 'tof', 'wavelength')
-    background = sc.rebin(background, 'wavelength', wavelength_bins)
-    return background
-
-
-def setup_transmission(data, wavelength_bins):
-    incident_beam = extract_monitor_background(data['spectrum',
-                                                    0], 40000.0 * sc.units.us,
-                                               99000.0 * sc.units.us,
-                                               wavelength_bins)
-    transmission = extract_monitor_background(data['spectrum',
-                                                   3], 88000.0 * sc.units.us,
-                                              98000.0 * sc.units.us,
-                                              wavelength_bins)
-    return transmission_fraction(incident_beam, transmission)
-
-
-def to_wavelength(data, transmission, direct_beam, masks, wavelength_bins):
-    transmission = setup_transmission(transmission, wavelength_bins)
+def to_wavelength(data, transmission, direct_beam, direct_beam_transmission,
+                  masks, wavelength_bins):
+    transmission = transmission_fraction(transmission,
+                                         direct_beam_transmission,
+                                         wavelength_bins)
     data = data.copy()
     for name, mask in masks.items():
         data.masks[name] = mask
@@ -81,8 +77,8 @@ def to_wavelength(data, transmission, direct_beam, masks, wavelength_bins):
     data = sc.rebin(data, 'wavelength', wavelength_bins)
 
     monitor = data.attrs['monitor1'].value
-    monitor = background_mean(monitor, 'tof', 40000.0 * sc.units.us,
-                              99000.0 * sc.units.us)
+    monitor = subtract_background_mean(monitor, 'tof', 40000.0 * sc.units.us,
+                                       99000.0 * sc.units.us)
     monitor = sc.neutron.convert(monitor, 'tof', 'wavelength', out=monitor)
     monitor = sc.rebin(monitor, 'wavelength', wavelength_bins)
 
