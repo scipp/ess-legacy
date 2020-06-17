@@ -55,7 +55,7 @@ class LoKI:
         dims[0:1] = ['tube', 'straw', 'pixel']
         shape[0:1] = [self._ntube, self._nstraw, self._npixel]
         coords = {
-            dim: coord.copy()
+            dim: coord
             for dim, coord in data.coords.items()
             if not 'spectrum' in coord.dims
         }
