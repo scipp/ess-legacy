@@ -27,14 +27,15 @@ class LoKI:
         import scipp as sc
         import numpy as np
         pixel_layers = 0
-        straw_layers = 3
+        straw_mapping = [0, 0, 1, 1, 0, 1, 2]
+        straw_layers = max(straw_mapping) + 1
         tube_layers = 4
         pixel_layer = sc.Variable(dims=['pixel'],
                                   dtype=sc.dtype.int32,
                                   values=np.zeros(self._npixel))
         straw_layer = sc.Variable(dims=['straw'],
                                   dtype=sc.dtype.int32,
-                                  values=[0, 0, 1, 1, 0, 1, 2])
+                                  values=straw_mapping)
         tube_layer = sc.Variable(dims=['tube'],
                                  dtype=sc.dtype.int32,
                                  values=np.arange(self._ntube) % tube_layers)
@@ -63,3 +64,15 @@ class LoKI:
                                             dims=dims,
                                             shape=tuple(shape)),
                             coords=coords)
+
+    def instrument_view(self, data, **kwargs):
+        import scipp as sc
+        # Detectors at LARMOR test are at 30m
+        default = {
+            'bins': 1,
+            'pixel_size': 0.01,
+            'camera_pos': [0.2, 0.4, 28.5],
+            'look_at': [0, 0, 30]
+        }
+        default.update(kwargs)
+        sc.neutron.instrument_view(data, **default)
