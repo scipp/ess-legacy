@@ -92,6 +92,8 @@ def to_wavelength(data, transmission, direct_beam, direct_beam_transmission,
 
 
 def reduce(data, q_bins):
+    data = sc.neutron.convert(data, 'wavelength', 'Q',
+                              out=data)  # TODO no gravity yet
     data = sc.histogram(data, q_bins)
     if 'layer' in data.coords:
         return sc.groupby(data, 'layer').sum('spectrum')
