@@ -79,41 +79,6 @@ def tiffs_to_variable(tiff_dir):
                        values=data, variances=data)
 
 
-def stitch(data_array, frame_parameters, frame_shifts, rebin_parameters):
-    """
-    Stitches the 5 different frames data.
-
-    It crops out each frame, then shifts it so that all frames align,
-    and then rebins to the operations bins used for all frames.
-    """
-    frames = []
-
-    rebin_params = sc.Variable(["tof"], unit=sc.units.us,
-                               values=np.linspace(
-                                   start=rebin_parameters["start"],
-                                   stop=rebin_parameters["stop"],
-                                   num=rebin_parameters["num_bins"],
-                                   dtype=np.float64))
-
-    for i, (slice_bins, shift_parameter) in enumerate(
-            zip(frame_parameters, frame_shifts)):
-        bins = sc.Variable(["tof"], unit=sc.units.us,
-                           values=np.arange(*slice_bins, dtype=np.float64))
-        # Rebins the whole data to crop it to frame bins
-        rebinned = sc.rebin(data_array, "tof", bins)
-        # Shift the frame backwards to make all frames overlap
-        rebinned.coords["tof"] += sc.Variable(shift_parameter, unit=sc.units.us)
-        # Rebin to overarching coordinates so that the frame coordinates align
-        rebinned = sc.rebin(rebinned, "tof", rebin_params)
-
-        frames.append(rebinned)
-
-    for f in frames[1:]:
-        frames[0] += f
-
-    return frames[0]
-
-
 def make_detector_groups(nx_original, ny_original, nx_target, ny_target):
     element_width_x = nx_original // nx_target
     element_width_y = ny_original // ny_target
