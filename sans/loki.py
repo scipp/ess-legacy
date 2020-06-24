@@ -60,10 +60,15 @@ class LoKI:
             for dim, coord in data.coords.items()
             if not 'spectrum' in coord.dims
         }
+        masks = {
+            name: sc.reshape(mask, dims=dims, shape=tuple(shape))
+            for name, mask in data.masks.items()
+        }
         return sc.DataArray(data=sc.reshape(data.data,
                                             dims=dims,
                                             shape=tuple(shape)),
-                            coords=coords)
+                            coords=coords,
+                            masks=masks)
 
     def instrument_view(self, data, **kwargs):
         import scipp as sc
