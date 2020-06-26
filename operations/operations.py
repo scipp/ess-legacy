@@ -12,6 +12,7 @@ def _shift(var, dim, forward, out_of_bounds):
     else:
         return sc.concatenate(var[dim, 1:], fill, dim)
 
+
 def mask_from_adj_pixels(mask):
     """
     Checks if the adjacent pixels (in 8 directions) are masked to remove
@@ -43,7 +44,10 @@ def mask_from_adj_pixels(mask):
 
     def make_flip(fill):
         flip = sc.Variable(dims=['neighbor', 'y', 'x'],
-                           shape=[8, ] + mask.shape, dtype=sc.dtype.bool)
+                           shape=[
+                               8,
+                           ] + mask.shape,
+                           dtype=sc.dtype.bool)
         flip['neighbor', 0] = _shift(mask, "x", True, fill)
         flip['neighbor', 1] = _shift(mask, "x", False, fill)
         flip['neighbor', 2] = _shift(mask, "y", True, fill)
@@ -58,6 +62,7 @@ def mask_from_adj_pixels(mask):
     mask = mask & sc.any(make_flip(False), 'neighbor')
     return mask
 
+
 def mean_from_adj_pixels(data):
     """
     Applies a mean across 8 neighboring pixels (includes centre value)
@@ -67,21 +72,26 @@ def mean_from_adj_pixels(data):
     For example if there is a tof dimension in addition to x, and y, 
     for each set of neighbours the returned mean will take the mean tof value in the neighbour group.
     """
-    fill = np.finfo(data.values.dtype).min  
+    fill = np.finfo(data.values.dtype).min
     sc_fill = sc.Variable(value=fill)
 
-    container = sc.Variable(['neighbor'] + data.dims, shape=[9,] + data.shape) 
+    container = sc.Variable(['neighbor'] + data.dims, shape=[
+        9,
+    ] + data.shape)
     container['neighbor', 0] = data
     container['neighbor', 1] = _shift(data, "x", True, fill)
     container['neighbor', 2] = _shift(data, "x", False, fill)
     container['neighbor', 3] = _shift(data, "y", True, fill)
     container['neighbor', 4] = _shift(data, "y", False, fill)
-    container['neighbor', 5:7] = _shift(container['neighbor', 1:3], "y", True, fill)
-    container['neighbor', 7:9] = _shift(container['neighbor', 1:3], "y", False, fill)
+    container['neighbor', 5:7] = _shift(container['neighbor', 1:3], "y", True,
+                                        fill)
+    container['neighbor', 7:9] = _shift(container['neighbor', 1:3], "y", False,
+                                        fill)
 
     edges_mask = sc.less_equal(container, sc.Variable(value=fill))
-    da = sc.DataArray(data=container, masks={'edges':edges_mask})        
+    da = sc.DataArray(data=container, masks={'edges': edges_mask})
     return sc.mean(da, dim='neighbor').data
+
 
 def _calc_adj_spectra(center_spec_num, bank_width, num_spectra):
     col_positions = [-1, 0, 1]  # Take relative positions of col
@@ -116,10 +126,10 @@ def generate_neighbouring_spectra(num_spectra: int, bank_width: int):
     # require shifts
     from multiprocessing import Pool
     with Pool() as p:
-        results = p.map(partial(_calc_adj_spectra,
-                                bank_width=bank_width,
-                                num_spectra=num_spectra),
-                        range(num_spectra))
+        results = p.map(
+            partial(_calc_adj_spectra,
+                    bank_width=bank_width,
+                    num_spectra=num_spectra), range(num_spectra))
     assert len(results) == num_spectra
 
     packed_pixels = {}
