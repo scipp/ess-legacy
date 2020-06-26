@@ -71,6 +71,29 @@ class OperationsTest(unittest.TestCase):
 
         self.assertEqual(expected, self._run_test(test_input).values.tolist())
 
+    def test_mean_filter(self):
+        bulk_value = 1
+        test_value = 4
+        data = np.array([bulk_value]*9 * 9 * 4, dtype=np.float64).reshape(9, 9, 4)
+        data = sc.Variable(['y', 'x', 'z'], values=data)
+        data['z', 1]['x',4]['y',4].value = test_value # centre at z == 1
+        data['z', 2]['x',4]['y',0].value = test_value # edge at z == 3
+        data['z', 3]['x',0]['y',0].value = test_value # corner at z == 2
+
+        centre_mean = (bulk_value * 8 + test_value * 1) / 9
+        corner_mean = (bulk_value * 3 + test_value * 1 ) / 4
+        edge_mean = (bulk_value * 5 + test_value * 1 ) / 6
+
+        mean = operations.mean_from_adj_pixels(data)
+   
+        assert mean['z', 0] == data['z', 0] # mean of 1 everywhere same as original 
+
+        assert mean['z', 1]['y', 3:6]['x', 3:6] == sc.Variable(['y', 'x'], values=np.array([centre_mean] * 9).reshape(3,3)) 
+
+        assert mean['z', 2]['y', 0:1]['x', 3:6] == sc.Variable(['y', 'x'], values=np.array([edge_mean] * 3).reshape(1,3)) 
+        assert mean['z', 2]['y', 1:2]['x', 3:6] == sc.Variable(['y', 'x'], values=np.array([centre_mean] * 3).reshape(1,3)) 
+
+        assert mean['z', 3]['y', 0]['x', 0].value == corner_mean
 
 if __name__ == '__main__':
     unittest.main()
