@@ -65,7 +65,7 @@ def mask_from_adj_pixels(mask):
 
 def mean_from_adj_pixels(data):
     """
-    Applies a mean across 8 neighboring pixels (includes centre value)
+    Applies a mean across 8 neighboring pixels (plus centre value)
     for data with 'x' and 'y' dimensions (at least).
     Result will calculate mean from slices across additional dimensions.
     
@@ -73,11 +73,12 @@ def mean_from_adj_pixels(data):
     for each set of neighbours the returned mean will take the mean tof value in the neighbour group.
     """
     fill = np.finfo(data.values.dtype).min
-    sc_fill = sc.Variable(value=fill)
-
-    container = sc.Variable(['neighbor'] + data.dims, shape=[
-        9,
-    ] + data.shape)
+    has_variances = not data.variances is None
+    container = sc.Variable(['neighbor'] + data.dims,
+                            shape=[
+                                9,
+                            ] + data.shape,
+                            variances=has_variances)
     container['neighbor', 0] = data
     container['neighbor', 1] = _shift(data, "x", True, fill)
     container['neighbor', 2] = _shift(data, "x", False, fill)
@@ -91,6 +92,51 @@ def mean_from_adj_pixels(data):
     edges_mask = sc.less_equal(container, sc.Variable(value=fill))
     da = sc.DataArray(data=container, masks={'edges': edges_mask})
     return sc.mean(da, dim='neighbor').data
+
+
+def _median(neighbors, edges_mask, dim):
+    masked_values = np.ma.array(neighbors.values,
+                                mask=edges_mask.values,
+                                copy=False)
+    masked_median_v = np.ma.median(masked_values, axis=0)
+    if neighbors.variances is not None:
+        masked_median_var = np.ma.median(neighbors.variances, axis=0)
+        np.ma.array(neighbors.variances, mask=edges_mask.values, copy=False)
+        return sc.Variable(dims=neighbors.dims[1:],
+                           values=masked_median_v,
+                           variances=masked_median_var)
+    return sc.Variable(dims=neighbors.dims[1:], values=masked_median_v)
+
+
+def median_from_adj_pixels(data):
+    """
+    Applies a median across 8 neighboring pixels (plus centre value)
+    for data with 'x' and 'y' dimensions (at least).
+    Result will calculate median from slices across additional dimensions.
+
+    For example if there is a tof dimension in addition to x, and y,
+    for each set of neighbours the returned median will take the median tof value in the neighbour group.
+    """
+    fill = np.finfo(data.values.dtype).min
+    has_variances = not data.variances is None
+    container = sc.Variable(['neighbor'] + data.dims,
+                            shape=[
+                                9,
+                            ] + data.shape,
+                            variances=has_variances)
+    container['neighbor', 0] = data
+    container['neighbor', 1] = _shift(data, "x", True, fill)
+    container['neighbor', 2] = _shift(data, "x", False, fill)
+    container['neighbor', 3] = _shift(data, "y", True, fill)
+    container['neighbor', 4] = _shift(data, "y", False, fill)
+    container['neighbor', 5:7] = _shift(container['neighbor', 1:3], "y", True,
+                                        fill)
+    container['neighbor', 7:9] = _shift(container['neighbor', 1:3], "y", False,
+                                        fill)
+
+    edges_mask = sc.less_equal(container, sc.Variable(value=fill,
+                                                      variance=fill))
+    return _median(container, edges_mask, dim='neighbor')
 
 
 def _calc_adj_spectra(center_spec_num, bank_width, num_spectra):
