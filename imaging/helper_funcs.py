@@ -75,7 +75,7 @@ def tiffs_to_variable(tiff_dir):
     stack = _load_tiffs(tiff_dir)
     data = stack.astype(np.float64).reshape(stack.shape[0],
                                             stack.shape[1] * stack.shape[2])
-    return sc.Variable(["tof", "spectrum"],
+    return sc.Variable(["t", "spectrum"],
                        values=data, variances=data)
 
 
