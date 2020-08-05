@@ -56,9 +56,9 @@ class LoKI:
         dims[0:1] = ['tube', 'straw', 'pixel']
         shape[0:1] = [self._ntube, self._nstraw, self._npixel]
         coords = {
-            dim: coord
+            dim: sc.reshape(coord, dims=dims, shape=tuple(shape))
+            if 'spectrum' in coord.dims else coord
             for dim, coord in data.coords.items()
-            if not 'spectrum' in coord.dims
         }
         masks = {
             name: sc.reshape(mask, dims=dims, shape=tuple(shape))
@@ -76,8 +76,8 @@ class LoKI:
         default = {
             'bins': 1,
             'pixel_size': 0.01,
-            'camera_pos': [0.2, 0.4, 28.5],
-            'look_at': [0, 0, 30]
+            #'camera_pos': [0.2, 0.4, 28.5],
+            #'look_at': [0, 0, 30]
         }
         default.update(kwargs)
         sc.neutron.instrument_view(data, **default)
