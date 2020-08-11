@@ -84,8 +84,8 @@ def make_detector_groups(nx_original, ny_original, nx_target, ny_target):
     element_width_y = ny_original // ny_target
 
     x = sc.Variable(dims=['x'],
-                    values=np.arange(nx_original)) / element_width_x
+                    values=np.arange(nx_original) // element_width_x)
     y = sc.Variable(dims=['y'],
-                    values=np.arange(ny_original)) / element_width_y
+                    values=np.arange(ny_original) // element_width_y)
     grid = x + nx_target * y
     return sc.Variable(["spectrum"], values=np.ravel(grid.values))
