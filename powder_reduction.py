@@ -52,12 +52,12 @@ def powder_reduction(sample='sample.nxs',
 
     **absorp: dictionary containing information to correct absorption for Sample and
               Vanadium.
-              There could be only up to two elements related to the correction for Vanadium: 
+              There could be only up to two elements related to the correction for Vanadium:
               the radius and height of the cylindrical sample shape.
-              To distinguish them from the inputs related to the sample, their names in the 
+              To distinguish them from the inputs related to the sample, their names in the
               dictionary  are 'CylinderVanadiumRadius' and 'CylinderVanadiumHeight'. The other keys
-              of the 'absorp' dictionary follow Mantid's syntax and are related to the sample data 
-              only.    
+              of the 'absorp' dictionary follow Mantid's syntax and are related to the sample data
+              only.
               see help of Mantid's algorithm CylinderAbsorption for details
               https://docs.mantidproject.org/nightly/algorithms/CylinderAbsorption-v1.html
 
@@ -84,7 +84,7 @@ def powder_reduction(sample='sample.nxs',
         cal = load_calibration(calibration, mantid_args=input_load_cal)
         # Merge table with detector->spectrum mapping from sample
         # (implicitly checking that detectors between sample and calibration are the same)
-        cal_sample = sc.merge(cal, sample_data.coords['detector_info'].value)
+        cal_sample = sc.merge(cal, sample_data.coords['detector-info'].value)
         # Compute spectrum mask from detector mask
         mask = sc.groupby(cal_sample['mask'], group='spectrum').any('detector')
 
@@ -144,7 +144,7 @@ def powder_reduction(sample='sample.nxs',
 
     # 2. absorption correction
     if bool(absorp):
-        # Copy dictionary of absorption parameters 
+        # Copy dictionary of absorption parameters
         absorp_sample = absorp.copy()
         # Remove input related to Vanadium if present in absorp dictionary
         found_vana_info = [key for key in absorp_sample.keys() if 'Vanadium' in key]
@@ -161,8 +161,8 @@ def powder_reduction(sample='sample.nxs',
         # position at the right place in the correction dataArray in order to
         # proceed to the normalization
 
-        del correction.coords['source_position']
-        del correction.coords['sample_position']
+        del correction.coords['source-position']
+        del correction.coords['sample-position']
         del correction.coords['position']
 
         correction_rebin = sc.rebin(correction, 'wavelength', edges_lambda)
@@ -215,9 +215,9 @@ def powder_reduction(sample='sample.nxs',
         # histogram vanadium for normalizing + cleaning 'metadata'
         vana_histo = sc.histogram(vana_red_focused)
         del vana_red_focused
-        vana_histo.coords['detector_info'] = focused.coords['detector_info'].copy()
-        del vana_histo.coords['source_position']
-        del vana_histo.coords['sample_position']
+        vana_histo.coords['detector-info'] = focused.coords['detector-info'].copy()
+        del vana_histo.coords['source-position']
+        del vana_histo.coords['sample-position']
 
         # normalize by vanadium
         focused /= vana_histo
@@ -343,8 +343,8 @@ def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=Non
         # position at the right place in the correction dataArray in order to
         # proceed to the normalization
 
-        del correction.coords['source_position']
-        del correction.coords['sample_position']
+        del correction.coords['source-position']
+        del correction.coords['sample-position']
         del correction.coords['position']
 
         correction = sc.rebin(correction,
@@ -373,7 +373,7 @@ def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=Non
     calvana = load_calibration(calibration, mantid_args=input_load_cal)
     # Merge table with detector->spectrum mapping from vanadium
     # (implicitly checking that detectors between vanadium and calibration are the same)
-    cal_vana = sc.merge(calvana, vana_dspacing.coords['detector_info'].value)
+    cal_vana = sc.merge(calvana, vana_dspacing.coords['detector-info'].value)
 
     # Compute spectrum mask from detector mask
     maskvana = sc.groupby(cal_vana['mask'], group='spectrum').any('detector')
@@ -398,7 +398,7 @@ def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=Non
 if __name__ == "__main__":
 
     # The value 5615 for the number of bins in wavelength corresponds to the value in Mantid
-    # after rebinning 
+    # after rebinning
     sample_file = 'WISH00043525.nxs'
     cal_file = "WISH_cycle_15_4_noends_10to10_dodgytube_removed_feb2016.cal"
     vanadium_file = 'WISH00019612.nxs'
