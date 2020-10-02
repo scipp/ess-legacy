@@ -2,6 +2,44 @@
 import scipp as sc
 import numpy as np
 from contrib import to_bin_centers, to_bin_edges, map_to_bins
+import ipywidgets as w
+
+def load_and_return(run, path):
+    print(f'Loading data for run {run}:')
+    return sc.neutron.load(filename=f'{path}/LARMOR000{run}.nxs')
+
+def run_reduction(sample, sample_trans, background,
+                  background_trans, moderator_file_path, direct_beam_file_path,
+                   l_collimation, r1, r2, dr, wavelength_bins):
+    
+    dtype = sample.coords['position'].dtype
+    sample_pos_offset = sc.Variable(value=[0.0, 0.0, 0.30530], unit=sc.units.m, dtype=dtype)
+    bench_pos_offset = sc.Variable(value=[0.0, 0.001, 0.0], unit=sc.units.m, dtype=dtype)
+    for item in [sample, sample_trans, background, background_trans]:
+        item.coords['sample-position'] += sample_pos_offset
+        item.coords['position'] += bench_pos_offset
+
+    print('Reducing sample data:')
+    sample_q1d = q1d(data=sample, transmission=sample_trans, 
+                     l_collimation=l_collimation, r1=r1, r2=r2, dr=dr, wavelength_bins=wavelength_bins,
+                     direct_beam_file_path=direct_beam_file_path, moderator_file_path=moderator_file_path,
+                     wavelength_bands=None)
+
+    print('Reducing background data:')
+    background_q1d = q1d(data=background, transmission=background_trans,
+                         l_collimation=l_collimation, r1=r1, r2=r2, dr=dr, wavelength_bins=wavelength_bins,
+                         direct_beam_file_path=direct_beam_file_path, moderator_file_path=moderator_file_path,
+                         wavelength_bands=None)
+    
+    reduced = sample_q1d - background_q1d
+
+    # reduced.coords['Transmission'] = sc.Variable(
+    #     value=f'{sample_transmission_run_number}_trans_sample_0.9_13.5_unfitted')
+    # reduced.coords['TransmissionCan'] = sc.Variable(
+    #     value=f'{background_transmission_run_number}_trans_can_0.9_13.5_unfitted')
+    
+    print('Finished Reduction')
+    return reduced, sample_q1d, background_q1d
 
 def load_larmor(run_number):
     return sc.neutron.load(filename=f'{path}/LARMOR000{run_number}.nxs')
