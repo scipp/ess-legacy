@@ -5,17 +5,9 @@ from scipp.plot import plot
 import numpy as np
 import IPython.display as disp
 from graphical_reduction import q1d, run_reduction, load_and_return
+import os
 
 # Cheat dict to list allowed conversions. Should ideally get this from C++ code
-allowed_conversions = {
-    'tof': ('dspacing', 'wavelength', 'E'),
-    'd-spacing': ('tof', ),
-    'wavelength': ('Q', 'tof'),
-    'E': ('tof', ),
-    'Q': ('wavelength', ),
-    '': tuple()
-}
-
 dimesion_to_unit = {
     'tof': sc.units.us,
     'd-spacing': sc.units.angstrom,
@@ -24,37 +16,35 @@ dimesion_to_unit = {
     'Q': sc.units.one / sc.units.angstrom
 }
 
-
-class ConvertWidget(w.Box):
-    def __init__(self, scope):
+class TransformWidget(w.Box):
+    def __init__(self, scope, callable, name, inputs):
         super().__init__()
         self.scope = scope
-        self.input = w.Text(placeholder='Input',
-                            value='',
-                            continuous_update=False)
-        self.convert_from = w.Combobox(placeholder='from',
-                                       disabled=False,
-                                       continuous_update=False)
-        self.convert_to = w.Combobox(placeholder='to',
-                                     options=[],
-                                     disabled=False,
-                                     continuous_update=False)
+        self.input_widgets = []
+        self.input_converters = []
+        self.callback = callable
+
+        self.setup_inputs(inputs)
         self.output = w.Text(placeholder='Output',
                              value='',
                              continuous_update=False)
-        self.button = w.Button(description='convert')
-        self.button.on_click(self._on_convert)
-        self.input.observe(self._on_input_changed)
-        self.convert_from.observe(self._on_from_changed)
-        self.convert_to.observe(self._on_to_changed)
+
+        self.output = w.Text(placeholder='Output',
+                             value='',
+                             continuous_update=False)
+        self.button = w.Button(description=name)
+        self.button.on_click(self._on_button_click)
         self.children = [
-            w.HBox([
-                self.input, self.convert_from, self.convert_to, self.output,
-                self.button
-            ])
+            w.HBox(self.input_widgets + [self.output, self.button])
         ]
 
         self.subscribers = []
+
+    def setup_inputs(self, inputs):
+        for name, converter in inputs.items():   
+            self.input_widgets.append(
+                w.Text(placeholder=name, continuous_update=False))
+            self.input_converters.append(converter)
 
     def subscribe(self, observer):
         self.subscribers.append(observer)
@@ -63,53 +53,15 @@ class ConvertWidget(w.Box):
         for observer in self.subscribers:
             observer.update()
 
-    def _on_convert(self, b):
+    def _on_button_click(self, b):
+        kwargs = {
+            item.placeholder: converter(item.value)
+            for item, converter in zip(self.input_widgets,
+                                       self.input_converters)
+        }
         output_name = self.output.value
-        input_name = self.input.value
-        self.scope[output_name] = sc.neutron.convert(self.scope[input_name],
-                                                     self.convert_from.value,
-                                                     self.convert_to.value)
+        self.scope[output_name] = self.callback(**kwargs)
         self.notify()
-
-    def _on_input_changed(self, change_dict):
-        if change_dict['name'] == 'value':
-            try:
-                input = self.scope[change_dict['new']]
-                self.convert_from.options = [
-                    key for key in allowed_conversions.keys()
-                    if key in input.coords
-                ]
-            except KeyError:
-                print(f'{change_dict["owner"].value} does not exist.')
-            self.convert_from.disabled = False
-            self.update_output()
-
-    def _on_from_changed(self, change_dict):
-        if change_dict['name'] == 'value':
-            allowed_dimensions = change_dict['owner'].options if change_dict[
-                'owner'].options else allowed_conversions.keys()
-            if change_dict['new'] not in allowed_dimensions:
-                print(
-                    f"{change_dict['new']} not a recognised conversion dimension. Dimensions in data are {allowed_dimensions}"
-                )
-                return
-            self.convert_to.options = allowed_conversions[change_dict['new']]
-            self.update_output()
-
-    def _on_to_changed(self, change_dict):
-        if change_dict['name'] == 'value':
-            allowed_dimensions = change_dict['owner'].options if change_dict[
-                'owner'].options else allowed_conversions.keys()
-            if change_dict['new'] not in allowed_dimensions:
-                print(
-                    f"{change_dict['new']} not a recognised conversion dimension. Dimensions supported are {allowed_dimensions}"
-                )
-                return
-            self.update_output()
-
-    def update_output(self, changes=None):
-        if not self.output.value and self.convert_to.value and self.input.value:
-            self.output.value = self.input.value + '_' + self.convert_to.value
 
 
 class PlotWidget(w.Box):
@@ -156,7 +108,6 @@ class PlotWidget(w.Box):
         from IPython.core.display import display, HTML
         display(HTML(out))
 
-
     def _on_button_clicked(self, b):
         self.output.clear_output()
         with self.output:
@@ -173,21 +124,81 @@ class PlotWidget(w.Box):
             self._repr_html_(self.scope)
 
 
-class DataCreationWidget(w.Box):
-    def __init__(self, scope):
+def fake_load(filename):
+    dim = 'tof'
+    num_spectra = 10
+    return sc.Dataset(
+        {
+            'sample':
+            sc.Variable(['spectrum', dim],
+                        values=np.random.rand(num_spectra, 10),
+                        variances=0.1 * np.random.rand(num_spectra, 10)),
+            'background':
+            sc.Variable(['spectrum', dim],
+                        values=np.arange(0.0, num_spectra, 0.1).reshape(
+                            num_spectra, 10),
+                        variances=0.1 * np.random.rand(num_spectra, 10))
+        },
+        coords={
+            dim:
+            sc.Variable([dim],
+                        values=np.arange(11.0),
+                        unit=dimesion_to_unit[dim]),
+            'spectrum':
+            sc.Variable(['spectrum'],
+                        values=np.arange(num_spectra),
+                        unit=sc.units.one),
+            'source-position':
+            sc.Variable(value=np.array([1., 1., 10.]),
+                        dtype=sc.dtype.vector_3_float64,
+                        unit=sc.units.m),
+            'sample-position':
+            sc.Variable(value=np.array([1., 1., 60.]),
+                        dtype=sc.dtype.vector_3_float64,
+                        unit=sc.units.m),
+            'position':
+            sc.Variable(['spectrum'],
+                        values=np.arange(3 * num_spectra).reshape(
+                            num_spectra, 3),
+                        unit=sc.units.m,
+                        dtype=sc.dtype.vector_3_float64)
+        })
+
+
+class LoadWidget(w.Box):
+    def __init__(
+        self,
+        scope,
+        load_callable,
+        directory,
+        filename_descriptor,
+        filename_converter,
+        inputs = {}
+    ):
         super().__init__()
-        self.name = w.Text(placeholder='name')
-        self.dims = w.Combobox(placeholder='dims',
-                               options=('tof', ),
-                               ensure_option=False)
-        self.num_spectra = w.Text(placeholder='num spectra', value='')
-        self.button = w.Button(description='create')
-        self.button.on_click(self._create_data)
+        self.directory = directory
+        self.filename = w.Text(placeholder=filename_descriptor)
+        self.filename_converter = filename_converter
+
+        self.input_widgets = []
+        self.input_converters = []
+        self.callback = load_callable
+
+        self.setup_inputs(inputs)
+
+        self.button = w.Button(description='Load')
+        self.button.on_click(self._on_button_clicked)
         self.scope = scope
         self.children = [
-            w.HBox([self.name, self.dims, self.num_spectra, self.button])
+            w.HBox([self.filename] + self.input_widgets + [self.button])
         ]
         self.subscribers = []
+
+    def setup_inputs(self, inputs):
+        for name, converter in inputs.items():   
+            self.input_widgets.append(
+                w.Text(placeholder=name, continuous_update=False))
+            self.input_converters.append(converter)
 
     def subscribe(self, observer):
         self.subscribers.append(observer)
@@ -196,53 +207,16 @@ class DataCreationWidget(w.Box):
         for observer in self.subscribers:
             observer.update()
 
-    def _create_data(self, b):
-        dim = self.dims.value
-        if dim not in self.dims.options:
-            print(
-                f'Please enter a valid data dimension currently supported dimensions are {self.dims.options}'
-            )
-            return
-        num_spectra = int(self.num_spectra.value)
-        output_name = self.name.value
-        self.scope[output_name] = sc.Dataset(
-            {
-                'sample':
-                sc.Variable(['spectrum', dim],
-                            values=np.random.rand(num_spectra, 10),
-                            variances=0.1 * np.random.rand(num_spectra, 10)),
-                'background':
-                sc.Variable(['spectrum', dim],
-                            values=np.arange(0.0, num_spectra, 0.1).reshape(
-                                num_spectra, 10),
-                            variances=0.1 * np.random.rand(num_spectra, 10))
-            },
-            coords={
-                dim:
-                sc.Variable([dim],
-                            values=np.arange(11.0),
-                            unit=dimesion_to_unit[dim]),
-                'spectrum':
-                sc.Variable(['spectrum'],
-                            values=np.arange(num_spectra),
-                            unit=sc.units.one),
-                'source-position':
-                sc.Variable(value=np.array([1., 1., 10.]),
-                            dtype=sc.dtype.vector_3_float64,
-                            unit=sc.units.m),
-                'sample-position':
-                sc.Variable(value=np.array([1., 1., 60.]),
-                            dtype=sc.dtype.vector_3_float64,
-                            unit=sc.units.m),
-                'position':
-                sc.Variable(['spectrum'],
-                            values=np.arange(3 * num_spectra).reshape(
-                                num_spectra, 3),
-                            unit=sc.units.m,
-                            dtype=sc.dtype.vector_3_float64)
-            })
+    def _on_button_clicked(self, b):
+        kwargs = {
+            item.placeholder: converter(item.value)
+            for item, converter in zip(self.input_widgets,
+                                       self.input_converters)
+        }
+        filename = self.filename_converter(self.filename.value)
+        filepath = os.path.join(self.directory, filename)
+        self.scope[filename] = self.callback(filepath, **kwargs)
         self.notify()
-
 
 class ReductionWidget(w.Box):
     def __init__(self, scope):
@@ -272,7 +246,8 @@ class ReductionWidget(w.Box):
         sample = self.scope[self.data_name(self.sample.value)]
         sample_trans = self.scope[self.data_name(self.sample_trans.value)]
         background = self.scope[self.data_name(self.background.value)]
-        background_trans = self.scope[self.data_name(self.background_trans.value)]
+        background_trans = self.scope[self.data_name(
+            self.background_trans.value)]
         moderator_file_path = f'{self.scope["path"]}/{self.scope["moderator_file"]}'
         direct_beam_file_path = f'{self.scope["path"]}/{self.scope["direct_beam_file"]}'
         l_collimation = self.scope['l_collimation']
@@ -286,7 +261,7 @@ class ReductionWidget(w.Box):
                 sample, sample_trans, background, background_trans,
                 moderator_file_path, direct_beam_file_path, l_collimation, r1,
                 r2, dr, wavelength_bins)
-            
+
             #Need to think up a better naming scheme for reduced data
             reduced_name = f'reduced_sans{self.sample.value}'
             sample_name = f'sample_sans{self.sample.value}'
@@ -303,7 +278,10 @@ class ReductionWidget(w.Box):
             self.sample.value, self.sample_trans.value, self.background.value,
             self.background_trans.value
         ]
-        run_list = [item for item in run_list if self.data_name(item) not in self.scope.keys()]
+        run_list = [
+            item for item in run_list
+            if self.data_name(item) not in self.scope.keys()
+        ]
         with self.output:
             for run in run_list:
                 data = load_and_return(run, self.scope['path'])
