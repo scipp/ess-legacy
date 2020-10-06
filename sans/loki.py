@@ -58,17 +58,24 @@ class LoKI:
         coords = {
             dim: sc.reshape(coord, dims=dims, shape=tuple(shape))
             if 'spectrum' in coord.dims else coord
-            for dim, coord in data.coords.items()
+            for dim, coord in data.aligned_coords.items()
+        }
+        unaligned_coords = {
+            dim: sc.reshape(coord, dims=dims, shape=tuple(shape))
+            if 'spectrum' in coord.dims else coord
+            for dim, coord in data.unaligned_coords.items()
         }
         masks = {
             name: sc.reshape(mask, dims=dims, shape=tuple(shape))
+            if 'spectrum' in mask.dims else mask
             for name, mask in data.masks.items()
         }
         return sc.DataArray(data=sc.reshape(data.data,
                                             dims=dims,
                                             shape=tuple(shape)),
                             coords=coords,
-                            masks=masks)
+                            masks=masks,
+                            unaligned_coords=unaligned_coords)
 
     def instrument_view(self, data, **kwargs):
         import scipp as sc

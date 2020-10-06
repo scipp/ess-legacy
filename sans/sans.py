@@ -76,7 +76,7 @@ def to_wavelength(data, transmission, direct_beam, direct_beam_transmission,
     data = sc.neutron.convert(data, 'tof', 'wavelength', out=data)
     data = sc.rebin(data, 'wavelength', wavelength_bins)
 
-    monitor = data.attrs['monitor1'].value
+    monitor = data.coords['monitor1'].value
     monitor = subtract_background_mean(monitor, 'tof', 40000.0 * sc.units.us,
                                        99000.0 * sc.units.us)
     monitor = sc.neutron.convert(monitor, 'tof', 'wavelength', out=monitor)
