@@ -5,13 +5,7 @@ import numpy as np
 import IPython.display as disp
 import os
 
-dimesion_to_unit = {
-    'tof': sc.units.us,
-    'd-spacing': sc.units.angstrom,
-    'wavelength': sc.units.angstrom,
-    'E': sc.units.meV,
-    'Q': sc.units.one / sc.units.angstrom
-}
+allowed_dimensions = ['tof', 'd-spacing', 'wavelength', 'E', 'Q']
 
 
 def filepath_converter(filename):
@@ -31,16 +25,22 @@ def filepath_converter(filename):
 
 
 class ProcessWidget(w.Box):
-    def __init__(self, scope, callable, name, inputs, descriptions={}):
+    def __init__(self,
+                 scope,
+                 callable,
+                 name,
+                 inputs,
+                 descriptions={},
+                 options={}):
         super().__init__()
         self.scope = scope
         self.callable = callable
 
         self.input_widgets = []
         self.inputs = inputs
-        self.setup_input_widgets(descriptions)
+        self.setup_input_widgets(descriptions, options)
 
-        self.output = w.Text(placeholder='Output',
+        self.output = w.Text(placeholder='output name',
                              value='',
                              continuous_update=False)
 
@@ -53,11 +53,15 @@ class ProcessWidget(w.Box):
 
         self.subscribers = []
 
-    def setup_input_widgets(self, descriptions):
+    def setup_input_widgets(self, descriptions, options):
         for name in self.inputs.keys():
             placeholder = descriptions[name] if name in descriptions else name
+            option = options[name] if name in options else []
+            option = option() if callable(option) else option
             self.input_widgets.append(
-                w.Text(placeholder=placeholder, continuous_update=False))
+                w.Combobox(placeholder=placeholder,
+                           continuous_update=False,
+                           options=option))
 
     def subscribe(self, observer):
         self.subscribers.append(observer)
@@ -73,8 +77,8 @@ class ProcessWidget(w.Box):
     def _retrive_kwargs(self):
         kwargs = {
             name: converter(item.value)
-            for name, converter, item in zip(self.inputs.keys(
-            ), self.inputs.values(), self.input_widgets)
+            for name, converter, item in zip(
+                self.inputs.keys(), self.inputs.values(), self.input_widgets)
         }
         return kwargs
 
@@ -84,7 +88,13 @@ class ProcessWidget(w.Box):
         except ValueError as e:
             print(f'Invalid inputs: {e}')
             return
-        output_name = self.output.value
+
+        if self.output.value:
+            output_name = self.output.value
+        else:
+            print(f'Invalid inputs: No output name specified')
+            return
+
         self.scope[output_name] = self.callable(**kwargs)
 
 
@@ -165,9 +175,7 @@ def fake_load(filepath):
         },
         coords={
             dim:
-            sc.Variable([dim],
-                        values=np.arange(11.0),
-                        unit=dimesion_to_unit[dim]),
+            sc.Variable([dim], values=np.arange(11.0), unit=sc.units.us),
             'spectrum':
             sc.Variable(['spectrum'],
                         values=np.arange(num_spectra),
