@@ -51,6 +51,18 @@ class ProcessWidget(w.Box):
         self.process()
         self.notify()
 
+    def _retrive_kwargs(self):
+        try:
+            kwargs = {
+                item.placeholder: converter(item.value)
+                for item, converter in zip(self.input_widgets,
+                                        self.input_converters)
+            }
+        except ValueError as e:
+            print(f'Invalid inputs: {e}')
+            return
+        return kwargs
+
     def process(self):
         pass
 
@@ -67,11 +79,7 @@ class TransformWidget(ProcessWidget):
         ]
 
     def process(self):
-        kwargs = {
-            item.placeholder: converter(item.value)
-            for item, converter in zip(self.input_widgets,
-                                       self.input_converters)
-        }
+        kwargs = self._retrive_kwargs()
         output_name = self.output.value
         self.scope[output_name] = self.callable(**kwargs)
 
@@ -96,11 +104,7 @@ class LoadWidget(ProcessWidget):
         ]
 
     def process(self):
-        kwargs = {
-            item.placeholder: converter(item.value)
-            for item, converter in zip(self.input_widgets,
-                                       self.input_converters)
-        }
+        kwargs = self._retrive_kwargs()
         filename = self.filename_converter(self.filename.value)
         filepath = os.path.join(self.directory, filename)
         self.scope[filename] = self.callable(filepath, **kwargs)
