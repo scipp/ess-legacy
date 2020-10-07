@@ -5,7 +5,6 @@ import numpy as np
 import IPython.display as disp
 import os
 
-
 dimesion_to_unit = {
     'tof': sc.units.us,
     'd-spacing': sc.units.angstrom,
@@ -15,30 +14,50 @@ dimesion_to_unit = {
 }
 
 
+def filepath_converter(filename):
+    if filename.isdigit():
+        # specified by run number
+        filename = 'LARMOR' + filename
+
+    # We will probably want to be a bit cleverer in how we hande file
+    # finding and directory specifying. In particular browsing to files
+    # or directories may be a requirment.
+    directory = '/path/to/data/directory'
+    filepath = os.path.join(directory, filename)
+    # Commenting out as would always throw when loading fake files.
+    # if not os.path.exists(filepath):
+    #     raise ValueError(f'File {}')
+    return filepath
+
+
 class ProcessWidget(w.Box):
-    def __init__(self, scope, callable, name, inputs):
+    def __init__(self, scope, callable, name, inputs, descriptions={}):
         super().__init__()
         self.scope = scope
         self.callable = callable
-        self.input_widgets = []
-        self.input_converters = []
 
-        self.setup_inputs(inputs)
+        self.input_widgets = []
+        self.inputs = inputs
+        self.setup_input_widgets(descriptions)
+
+        self.output = w.Text(placeholder='Output',
+                             value='',
+                             continuous_update=False)
 
         self.button = w.Button(description=name)
         self.button.on_click(self._on_button_click)
 
         self.children = [
-            w.HBox(self.input_widgets + [self.button])
+            w.HBox(self.input_widgets + [self.output, self.button])
         ]
 
         self.subscribers = []
 
-    def setup_inputs(self, inputs):
-        for name, converter in inputs.items():   
+    def setup_input_widgets(self, descriptions):
+        for name in self.inputs.keys():
+            placeholder = descriptions[name] if name in descriptions else name
             self.input_widgets.append(
-                w.Text(placeholder=name, continuous_update=False))
-            self.input_converters.append(converter)
+                w.Text(placeholder=placeholder, continuous_update=False))
 
     def subscribe(self, observer):
         self.subscribers.append(observer)
@@ -52,63 +71,21 @@ class ProcessWidget(w.Box):
         self.notify()
 
     def _retrive_kwargs(self):
-        try:
-            kwargs = {
-                item.placeholder: converter(item.value)
-                for item, converter in zip(self.input_widgets,
-                                        self.input_converters)
-            }
-        except ValueError as e:
-            print(f'Invalid inputs: {e}')
-            return
+        kwargs = {
+            name: converter(item.value)
+            for name, converter, item in zip(self.inputs.keys(
+            ), self.inputs.values(), self.input_widgets)
+        }
         return kwargs
 
     def process(self):
-        pass
-
-
-class TransformWidget(ProcessWidget):
-    def __init__(self, scope, callable, name, inputs):
-        super().__init__(scope, callable, name, inputs)
-        self.output = w.Text(placeholder='Output',
-                             value='',
-                             continuous_update=False)
-
-        self.children = [
-            w.HBox(self.input_widgets + [self.output, self.button])
-        ]
-
-    def process(self):
-        kwargs = self._retrive_kwargs()
+        try:
+            kwargs = self._retrive_kwargs()
+        except ValueError as e:
+            print(f'Invalid inputs: {e}')
+            return
         output_name = self.output.value
         self.scope[output_name] = self.callable(**kwargs)
-
-
-class LoadWidget(ProcessWidget):
-    def __init__(
-        self,
-        scope,
-        load_callable,
-        directory,
-        filename_descriptor,
-        filename_converter,
-        inputs = {}
-    ):
-        super().__init__(scope, load_callable, 'Load', inputs)
-        self.directory = directory
-        self.filename = w.Text(placeholder=filename_descriptor)
-        self.filename_converter = filename_converter
-
-        self.children = [
-            w.HBox([self.filename] + self.input_widgets + [self.button])
-        ]
-
-    def process(self):
-        kwargs = self._retrive_kwargs()
-        filename = self.filename_converter(self.filename.value)
-        filepath = os.path.join(self.directory, filename)
-        self.scope[filename] = self.callable(filepath, **kwargs)
-        self.notify()
 
 
 class PlotWidget(w.Box):
@@ -171,7 +148,7 @@ class PlotWidget(w.Box):
             self._repr_html_(self.scope)
 
 
-def fake_load(filename):
+def fake_load(filepath):
     dim = 'tof'
     num_spectra = 10
     return sc.Dataset(
@@ -215,24 +192,22 @@ def fake_load(filename):
 #Method to hide code blocks taken from
 #https://stackoverflow.com/questions/27934885/how-to-hide-code-from-cells-in-ipython-notebook-visualized-with-nbviewer
 javascript_functions = {False: "hide()", True: "show()"}
-button_descriptions  = {False: "Show code", True: "Hide code"}
+button_descriptions = {False: "Show code", True: "Hide code"}
 
 
 def toggle_code(state):
-
     """
     Toggles the JavaScript show()/hide() function on the div.input element.
     """
 
     output_string = "<script>$(\"div.input\").{}</script>"
-    output_args   = (javascript_functions[state],)
-    output        = output_string.format(*output_args)
+    output_args = (javascript_functions[state], )
+    output = output_string.format(*output_args)
 
     disp.display(disp.HTML(output))
 
 
 def button_action(value):
-
     """
     Calls the toggle_code function and updates the button description.
     """
@@ -248,6 +223,6 @@ def setup_code_hiding():
     state = False
     toggle_code(state)
 
-    button = w.ToggleButton(state, description = button_descriptions[state])
+    button = w.ToggleButton(state, description=button_descriptions[state])
     button.observe(button_action, "value")
     return button
