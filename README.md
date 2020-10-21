@@ -1,4 +1,7 @@
-# scipp-ess
+# scipp-ess-legacy
+
+**WARNING**
+*This repository is deprecated in favour of https://github.com/scipp/ess and https://github.com/scipp/ess-notebooks, which contain ess specific reduction tools and notebooks respectively.* 
 
 This repository contains [ESS](https://europeanspallationsource.se/)-specific code building on [scipp](https://github.com/scipp/scipp).
 
