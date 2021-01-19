@@ -49,33 +49,25 @@ class LoKI:
         Reshape data to use ['tube','straw','pixel'] instead of ['spectrum'].
         """
         import scipp as sc
-        dims = data.dims
-        shape = data.shape
-        if dims[0] != 'spectrum':
+        if data.dims[0] != 'spectrum':
             raise RuntimeError("Expected 'spectrum' to be outer dim of data")
-        dims[0:1] = ['tube', 'straw', 'pixel']
-        shape[0:1] = [self._ntube, self._nstraw, self._npixel]
-        coords = {
-            dim: sc.reshape(coord, dims=dims, shape=tuple(shape))
-            if 'spectrum' in coord.dims else coord
-            for dim, coord in data.aligned_coords.items()
-        }
-        unaligned_coords = {
-            dim: sc.reshape(coord, dims=dims, shape=tuple(shape))
-            if 'spectrum' in coord.dims else coord
-            for dim, coord in data.unaligned_coords.items()
-        }
-        masks = {
-            name: sc.reshape(mask, dims=dims, shape=tuple(shape))
-            if 'spectrum' in mask.dims else mask
-            for name, mask in data.masks.items()
-        }
-        return sc.DataArray(data=sc.reshape(data.data,
-                                            dims=dims,
-                                            shape=tuple(shape)),
+
+        def reshape(var):
+            dims = var.dims
+            if 'spectrum' not in dims:
+                return var
+            shape = var.shape
+            dims[0:1] = ['tube', 'straw', 'pixel']
+            shape[0:1] = [self._ntube, self._nstraw, self._npixel]
+            return sc.reshape(var, dims=dims, shape=tuple(shape))
+
+        coords = {dim: reshape(coord) for dim, coord in data.coords.items()}
+        attrs = {dim: reshape(coord) for dim, coord in data.attrs.items()}
+        masks = {name: reshape(mask) for name, mask in data.masks.items()}
+        return sc.DataArray(data=reshape(data.data),
                             coords=coords,
                             masks=masks,
-                            unaligned_coords=unaligned_coords)
+                            attrs=attrs)
 
     def instrument_view(self, data, **kwargs):
         import scipp as sc
