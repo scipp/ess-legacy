@@ -2,7 +2,8 @@
 # coding: utf-8
 import numpy as np
 import scipp as sc
-from scipp.neutron.diffraction import load_calibration
+import scippneutron as scn
+from calibration import load_calibration  #, convert_with_calibration
 from smooth_data import smooth_data
 # from spline_background import bspline_background
 from absorption import absorption_correction
@@ -75,10 +76,10 @@ def powder_reduction(sample='sample.nxs',
 
     """
     # Load counts
-    sample_data = sc.neutron.load(sample,
-                                  advanced_geometry=True,
-                                  load_pulse_times=False,
-                                  mantid_args={'LoadMonitors': True})
+    sample_data = scn.load(sample,
+                           advanced_geometry=True,
+                           load_pulse_times=False,
+                           mantid_args={'LoadMonitors': True})
 
     # Load calibration
     if calibration is not None:
@@ -87,7 +88,7 @@ def powder_reduction(sample='sample.nxs',
         # Merge table with detector->spectrum mapping from sample
         # (implicitly checking that detectors between sample and calibration
         # are the same)
-        cal_sample = sc.merge(cal, sample_data.coords['detector-info'].value)
+        cal_sample = sc.merge(cal, sample_data.coords['detector_info'].value)
         # Compute spectrum mask from detector mask
         mask = sc.groupby(cal_sample['mask'], group='spectrum').any('detector')
 
@@ -96,7 +97,7 @@ def powder_reduction(sample='sample.nxs',
 
         group = g.min('detector')
 
-        assert sc.is_equal(group, g.max('detector')), \
+        assert sc.identical(group, g.max('detector')), \
             "Calibration table has mismatching group for detectors in same spectrum"
 
         sample_data.coords['group'] = group.data
@@ -109,9 +110,10 @@ def powder_reduction(sample='sample.nxs',
     # correction (like in the real WISH workflow).
 
     # Select fourth monitor and convert from tof to wavelength
-    mon4_lambda = sc.neutron.convert(sample_data.attrs['monitor4'].values,
-                                     'tof',
-                                     'wavelength')
+    mon4_lambda = scn.convert(sample_data.attrs['monitor4'].values,
+                              'tof',
+                              'wavelength',
+                              scatter=False)
 
     # Spline background
     # mon4_spline_background = bspline_background(mon4_lambda,
@@ -128,7 +130,7 @@ def powder_reduction(sample='sample.nxs',
     # Correct data
     # 1. Normalize to monitor
     # Convert to wavelength (counts)
-    sample_lambda = sc.neutron.convert(sample_data, 'tof', 'wavelength')
+    sample_lambda = scn.convert(sample_data, 'tof', 'wavelength', scatter=True)
 
     del sample_data
 
@@ -145,7 +147,7 @@ def powder_reduction(sample='sample.nxs',
                          edges_lambda)
 
     # Realign sample data
-    sample_lambda = sample_lambda.bins / sc.lookup(func=mon_rebin, 
+    sample_lambda = sample_lambda.bins / sc.lookup(func=mon_rebin,
                                                    dim='wavelength')
 
     del mon_rebin, mon4_smooth
@@ -169,8 +171,8 @@ def powder_reduction(sample='sample.nxs',
         # sample position at the right place in the correction dataArray in
         # order to proceed to the normalization
 
-        del correction.coords['source-position']
-        del correction.coords['sample-position']
+        del correction.coords['source_position']
+        del correction.coords['sample_position']
         del correction.coords['position']
 
         correction_rebin = sc.rebin(correction, 'wavelength', edges_lambda)
@@ -180,23 +182,21 @@ def powder_reduction(sample='sample.nxs',
         sample_lambda = sample_lambda.bins / sc.lookup(func=correction_rebin,
                                                        dim='wavelength')
 
-    sample_tof = sc.neutron.convert(sample_lambda, 'wavelength', 'tof')
-
-    del sample_lambda
-
     # 3. Convert to d-spacing taking calibration into account
     # has to switch to standard conversion in all cases, while support of
-    # convert_with_calibration for realign='linear' is implemented
-    sample_dspacing = sc.neutron.convert(sample_tof, 'tof', 'd-spacing')
+    # convert_with_calibration is implemented
 
-    del cal_sample, sample_tof
+    sample_dspacing = scn.convert(sample_lambda, 'wavelength', 'dspacing', scatter=True)
+
+    del sample_lambda
+    del cal_sample 
 
     # if calibration is None:
     #     # No calibration data, use standard convert algorithm
-    #     sample_dspacing = sc.neutron.convert(sample_tof, 'tof', 'd-spacing')
+    #     sample_dspacing = scn.convert(sample_tof, 'tof', 'dspacing')
     # else:
     #     # Calculate dspacing from calibration file
-    #     sample_dspacing = sc.neutron.diffraction.convert_with_calibration(sample_tof, cal_sample)
+    #     sample_dspacing = scn.diffraction.convert_with_calibration(sample_tof, cal_sample)
     #     del cal_sample
 
     # 4. Focus panels
@@ -222,7 +222,7 @@ def powder_reduction(sample='sample.nxs',
         # histogram vanadium for normalizing + cleaning 'metadata'
         d_min, d_max, number_dbins = (1., 10., 2000)
 
-        edges_dspacing = sc.Variable(['d-spacing'],
+        edges_dspacing = sc.Variable(['dspacing'],
                                      unit=sc.units.angstrom,
                                      values=np.linspace(d_min,
                                                         d_max,
@@ -230,12 +230,12 @@ def powder_reduction(sample='sample.nxs',
         vana_histo = sc.histogram(vana_red_focused, edges_dspacing)
 
         del vana_red_focused
-        vana_histo.coords['detector-info'] = focused.coords['detector-info'].copy()
-        del vana_histo.coords['source-position']
-        del vana_histo.coords['sample-position']
+        vana_histo.coords['detector_info'] = focused.coords['detector_info'].copy()
+        del vana_histo.coords['source_position']
+        del vana_histo.coords['sample_position']
 
         # normalize by vanadium
-        result = focused.bins / sc.lookup(func=vana_histo, dim='d-spacing')
+        result = focused.bins / sc.lookup(func=vana_histo, dim='dspacing')
 
         del vana_histo, focused
 
@@ -256,7 +256,7 @@ def process_event_data(file, lambda_binning):
     """
 
     # load nexus file
-    event_data = sc.neutron.load(file,
+    event_data = scn.load(file,
                                  advanced_geometry=True,
                                  load_pulse_times=False,
                                  mantid_args={'LoadMonitors': True})
@@ -264,9 +264,10 @@ def process_event_data(file, lambda_binning):
     # ################################
     # Monitor correction
     # extract monitor and convert from tof to wavelength
-    mon4_lambda = sc.neutron.convert(event_data.attrs['monitor4'].values,
-                                    'tof',
-                                    'wavelength')
+    mon4_lambda = scn.convert(event_data.attrs['monitor4'].values,
+                              'tof',
+                              'wavelength',
+                              scatter=False)
 
     mon4_smooth = smooth_data(mon4_lambda, dim='wavelength', NPoints=40)
 
@@ -275,7 +276,7 @@ def process_event_data(file, lambda_binning):
     # ################################
     # vana and EC
     # convert to lambda
-    event_lambda = sc.neutron.convert(event_data, 'tof', 'wavelength')
+    event_lambda = scn.convert(event_data, 'tof', 'wavelength', scatter=True)
 
     # normalize to monitor
     lambda_min, lambda_max, number_bins = lambda_binning
@@ -292,7 +293,7 @@ def process_event_data(file, lambda_binning):
 
     del mon4_smooth
 
-    event_lambda_norm = event_lambda.bins / sc.lookup(func=mon_rebin, 
+    event_lambda_norm = event_lambda.bins / sc.lookup(func=mon_rebin,
                                                       dim='wavelength')
 
     del mon_rebin, event_lambda
@@ -379,43 +380,43 @@ def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=Non
         # sample position at the right place in the correction dataArray in 
         # order to proceed to the normalization
 
-        del correction.coords['source-position']
-        del correction.coords['sample-position']
+        del correction.coords['source_position']
+        del correction.coords['sample_position']
         del correction.coords['position']
 
         lambda_min, lambda_max, number_bins = lambda_binning
 
-        edges_lambda = sc.Variable(['wavelength'], 
+        edges_lambda = sc.Variable(['wavelength'],
                                     unit=sc.units.angstrom,
-                                    values=np.linspace(lambda_min, 
-                                                       lambda_max, 
+                                    values=np.linspace(lambda_min,
+                                                       lambda_max,
                                                        num=number_bins))
 
         correction = sc.rebin(correction, 'wavelength', edges_lambda)
 
         # vana_red /= correction
-        vana_red_corr = vana_red.bins / sc.lookup(func=correction, dim='wavelength')
+        vana_red_corr = vana_red.bins / sc.lookup(func=correction,
+                                                  dim='wavelength')
 
         del correction, vana_red
 
-    # convert to TOF
-    vana_red_tof = sc.neutron.convert(vana_red_corr, 'wavelength', 'tof')
+    # convert to d-spacing (no calibration applied)
+
+    vana_dspacing = scn.convert(vana_red_corr,
+                                'wavelength',
+                                'dspacing',
+                                scatter=True)
 
     del vana_red_corr
-
-    # convert to d-spacing (no calibration applied)
-    vana_dspacing = sc.neutron.convert(vana_red_tof, 'tof', 'd-spacing')
-
-    del vana_red_tof
 
     # Calibration
     # Load
     input_load_cal = {'InstrumentFilename': 'WISH_Definition.xml'}
     calvana = load_calibration(calibration, mantid_args=input_load_cal)
     # Merge table with detector->spectrum mapping from vanadium
-    # (implicitly checking that detectors between vanadium and calibration 
-    # are the same)
-    cal_vana = sc.merge(calvana, vana_dspacing.coords['detector-info'].value)
+    # (implicitly checking that detectors between vanadium and
+    # calibration are the same)
+    cal_vana = sc.merge(calvana, vana_dspacing.coords['detector_info'].value)
 
     del calvana
 
@@ -427,7 +428,7 @@ def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=Non
 
     groupvana = gvana.min('detector')
 
-    assert sc.is_equal(groupvana, gvana.max('detector')), \
+    assert sc.identical(groupvana, gvana.max('detector')), \
         "Calibration table has mismatching group for detectors in same spectrum"
 
     vana_dspacing.coords['group'] = groupvana.data
@@ -448,7 +449,7 @@ if __name__ == "__main__":
     # The value 5615 for the number of bins in wavelength corresponds to the
     # value in Mantid after rebinning
     sample_file = 'WISH00043525.nxs'
-    cal_file = "WISH_cycle_15_4_noends_10to10_dodgytube_removed_feb2016.cal"
+    cal_file = 'WISH_cycle_15_4_noends_10to10_dodgytube_removed_feb2016.cal'
     vanadium_file = 'WISH00019612.nxs'
     empty_instrument_file = 'WISH00019618.nxs'
     input_for_absorption = {'AttenuationXSection': 2.595,
@@ -466,11 +467,12 @@ if __name__ == "__main__":
                                lambda_binning=(0.7, 10.35, 5615),
                                **input_for_absorption)
 
-    # #to plot the data, one could histogram in d-spacing
+    # to plot the data, one could histogram in d-spacing
     # dmin, dmax, numbers_bins_d = (1., 10., 9000)
-    # dspacing_bins = sc.Variable(['d-spacing'],
-    #                             values=np.linspace(dmin,
-    #                                                dmax,
-    #                                                numbers_bins_d),
+    # dspacing_bins = sc.Variable(['dspacing'],
+    #                             values=np.linspace(dmin, dmax, numbers_bins_d),
     #                             unit=sc.units.angstrom)
     # focused_hist = sc.histogram(focused, dspacing_bins)
+    # import matplotlib.pyplot as plt
+    # plt.plot(focused_hist['group', 0].values)
+    # plt.show()
