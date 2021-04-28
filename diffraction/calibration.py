@@ -20,9 +20,8 @@ def load_calibration(filename, mantid_args={}):
 
     Example of use:
 
-      from scipp.neutron.diffraction import load
       input = {"InstrumentName": "WISH"}
-      cal = loadCal('cal_file.cal', mantid_args=input')
+      cal = load_calibration('cal_file.cal', mantid_args=input')
 
     Note that this function requires mantid to be installed and available in
     the same Python environment as scipp.
