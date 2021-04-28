@@ -8,7 +8,7 @@ The main script is `powder_reduction.py` which uses event data from WISH at ISIS
 The required files i.e. sample, vanadium, empty instrument and calibration files are not provided.
 
 Note that it does not reproduce the official data reduction for this instrument. But it 
-simply illustrates how to use scipp and scippneutron to perform some of the steps required
+simply illustrates how to use `scipp` and `scippneutron` to perform some of the steps required
 to reduce data from event NeXus files collected at a spallation source.
 
 The Jupyter notebooks are used to demonstrate the implementation of intermediate steps of
