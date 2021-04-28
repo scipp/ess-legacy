@@ -3,7 +3,7 @@
 This folder contains Python scripts and Jupyter notebooks to reduce diffraction 
 data with `scipp` and `scippneutron`.
 
-The main script is `powder_reduction.py` with used event data from WISH at ISIS STFC.
+The main script is `powder_reduction.py` which uses event data from WISH at ISIS STFC.
 
 The required files i.e. sample, vanadium, empty instrument and calibration files are not provided.
 
