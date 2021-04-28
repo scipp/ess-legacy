@@ -14,5 +14,5 @@ to reduce data from event NeXus files collected at a spallation source.
 The Jupyter notebooks are used to demonstrate the implementation of intermediate steps of
 the reduction.
 
-The legacy folder contains older scripts, which are likeliy not to run with the current 
+The legacy folder contains older scripts, which will most likely not run with the current 
 version of scipp and scippneutron.
