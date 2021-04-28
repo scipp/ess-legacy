@@ -1,7 +1,7 @@
 # ess-legacy diffraction
 
 This folder contains Python scripts and Jupyter notebooks to reduce diffraction 
-data with scipp and scippneutron.
+data with `scipp` and `scippneutron`.
 
 The main script is `powder_reduction.py` with used event data from WISH at ISIS STFC.
 
