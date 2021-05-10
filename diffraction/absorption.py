@@ -1,4 +1,5 @@
 import scipp as sc
+import scippneutron as scn
 import mantid.simpleapi as simpleapi
 
 
@@ -44,4 +45,4 @@ def absorption_correction(filename, lambda_binning=(0.7, 10.35, 5615), **mantid_
 
     correction = simpleapi.CylinderAbsorption(workspace, **mantid_args)
 
-    return sc.neutron.from_mantid(correction)
+    return scn.from_mantid(correction)

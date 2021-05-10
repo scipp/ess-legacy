@@ -26,9 +26,9 @@ def smooth_data(variable, dim=None, NPoints=3):
         raise ValueError("smooth_data was not given a dim to smooth.")
 
     if NPoints < 3:
-        raise ValueError("smoot_hdata needs NPoints of 3 or higher.")
+        raise ValueError("smooth_data needs NPoints of 3 or higher.")
 
-    data_length = dict(zip(variable.dims, variable.shape))[sc.Dim(dim)]
+    data_length = dict(zip(variable.dims, variable.shape))[dim]
     out = variable.copy()  # preallocate output variable
 
     hr = NPoints//2  # half range rounded down
