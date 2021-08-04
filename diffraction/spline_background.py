@@ -24,8 +24,8 @@ def bspline_background(variable, dim, smoothing_factor=None):
     """
     if dim is None:
         raise ValueError("bspline_background: dimension must be specified.")
-    if not isinstance(dim, sc.Dim):
-        raise ValueError("bspline_background: dimension must be of Dim type.")
+    if not dim in variable.dims:
+        raise ValueError("bspline_background: dim must be a dimension of variable.")
     if smoothing_factor < 0:
         raise ValueError("bspline_background: smoothing_factor must be positive.")
 

@@ -3,7 +3,8 @@
 import numpy as np
 import scipp as sc
 import scippneutron as scn
-from calibration import load_calibration  #, convert_with_calibration
+from calibration import load_calibration
+from calibration import convert_with_calibration
 from smooth_data import smooth_data
 # from spline_background import bspline_background
 from absorption import absorption_correction
@@ -182,22 +183,16 @@ def powder_reduction(sample='sample.nxs',
         sample_lambda = sample_lambda.bins / sc.lookup(func=correction_rebin,
                                                        dim='wavelength')
 
-    # 3. Convert to d-spacing taking calibration into account
-    # has to switch to standard conversion in all cases, while support of
-    # convert_with_calibration is implemented
-
-    sample_dspacing = scn.convert(sample_lambda, 'wavelength', 'dspacing', scatter=True)
+    # 3. Convert to d-spacing with option of taking calibration into account
+    if calibration is None:
+        # No calibration data, use standard convert algorithm
+        sample_dspacing = scn.convert(sample_lambda, 'tof', 'dspacing')
+    else:
+        # Calculate dspacing from calibration file
+        sample_dspacing = convert_with_calibration(sample_lambda, cal_sample)
+        del cal_sample
 
     del sample_lambda
-    del cal_sample 
-
-    # if calibration is None:
-    #     # No calibration data, use standard convert algorithm
-    #     sample_dspacing = scn.convert(sample_tof, 'tof', 'dspacing')
-    # else:
-    #     # Calculate dspacing from calibration file
-    #     sample_dspacing = scn.diffraction.convert_with_calibration(sample_tof, cal_sample)
-    #     del cal_sample
 
     # 4. Focus panels
     # Assuming sample is in d-spacing: Focus into groups
@@ -231,8 +226,8 @@ def powder_reduction(sample='sample.nxs',
 
         del vana_red_focused
         vana_histo.coords['detector_info'] = focused.coords['detector_info'].copy()
-        del vana_histo.coords['source_position']
-        del vana_histo.coords['sample_position']
+        # del vana_histo.coords['source_position']
+        # del vana_histo.coords['sample_position']
 
         # normalize by vanadium
         result = focused.bins / sc.lookup(func=vana_histo, dim='dspacing')
@@ -301,7 +296,11 @@ def process_event_data(file, lambda_binning):
     return event_lambda_norm
 
 
-def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=None, **absorp):
+def process_vanadium_data(vanadium,
+                          empty_instr,
+                          lambda_binning,
+                          calibration=None,
+                          **absorp):
     """
     Create corrected vanadium dataset
 
@@ -329,7 +328,7 @@ def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=Non
               the correction
               see docstrings of powder_reduction for more details
               see help of Mantid's algorithm CylinderAbsorption for details
-              https://docs.mantidproject.org/nightly/algorithms/CylinderAbsorption-v1.html
+        https://docs.mantidproject.org/nightly/algorithms/CylinderAbsorption-v1.html
 
     """
     vana_red = process_event_data(vanadium, lambda_binning)
@@ -341,14 +340,14 @@ def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=Non
     max_lambda = vana_red.coords['wavelength'].values[:, 1].max()
     vana_red.coords['wavelength'] = sc.Variable(['wavelength'], 
                                                 unit=sc.units.angstrom,
-                                                values=np.linspace(min_lambda, 
+                                                values=np.linspace(min_lambda,
                                                                    max_lambda,
                                                                    num=2))
 
     ec_red.coords['wavelength'] = sc.Variable(['wavelength'], 
                                                unit=sc.units.angstrom,
-                                               values=np.linspace(min_lambda, 
-                                                                  max_lambda, 
+                                               values=np.linspace(min_lambda,
+                                                                  max_lambda,
                                                                   num=2))
 
     # vana - EC
@@ -366,7 +365,8 @@ def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=Non
         # the requirements of Mantid's algorithm CylinderAbsorption
 
         #  Create dictionary to calculate absorption correction for Vanadium.
-        absorp_vana = {key.replace('Vanadium', 'Sample'): value for key, value in absorp.items()
+        absorp_vana = {key.replace('Vanadium', 'Sample'): 
+        value for key, value in absorp.items()
                        if 'Vanadium' in key}
         absorp_vana['SampleNumberDensity'] = 0.07118
         absorp_vana['ScatteringXSection'] = 5.16
@@ -394,20 +394,10 @@ def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=Non
 
         correction = sc.rebin(correction, 'wavelength', edges_lambda)
 
-        # vana_red /= correction
-        vana_red_corr = vana_red.bins / sc.lookup(func=correction,
-                                                  dim='wavelength')
+        vana_red = vana_red.bins / sc.lookup(func=correction,
+                                             dim='wavelength')
 
-        del correction, vana_red
-
-    # convert to d-spacing (no calibration applied)
-
-    vana_dspacing = scn.convert(vana_red_corr,
-                                'wavelength',
-                                'dspacing',
-                                scatter=True)
-
-    del vana_red_corr
+        del correction
 
     # Calibration
     # Load
@@ -416,7 +406,7 @@ def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=Non
     # Merge table with detector->spectrum mapping from vanadium
     # (implicitly checking that detectors between vanadium and
     # calibration are the same)
-    cal_vana = sc.merge(calvana, vana_dspacing.coords['detector_info'].value)
+    cal_vana = sc.merge(calvana, vana_red.coords['detector_info'].value)
 
     del calvana
 
@@ -429,15 +419,20 @@ def process_vanadium_data(vanadium, empty_instr, lambda_binning, calibration=Non
     groupvana = gvana.min('detector')
 
     assert sc.identical(groupvana, gvana.max('detector')), \
-        "Calibration table has mismatching group for detectors in same spectrum"
+        ("Calibration table has mismatching group "
+         "for detectors in same spectrum")
 
-    vana_dspacing.coords['group'] = groupvana.data
-    vana_dspacing.masks['mask'] = maskvana.data
+    vana_red.coords['group'] = groupvana.data
+    vana_red.masks['mask'] = maskvana.data
 
-    del cal_vana
+    # convert to d-spacing with calibration
+    vana_dspacing = convert_with_calibration(vana_red, cal_vana)
+
+    del vana_red, cal_vana
 
     # Focus
-    focused_vana = sc.groupby(vana_dspacing, group='group').bins.concatenate('spectrum')
+    focused_vana = \
+    sc.groupby(vana_dspacing, group='group').bins.concatenate('spectrum')
 
     del vana_dspacing
 
@@ -468,7 +463,7 @@ if __name__ == "__main__":
                                **input_for_absorption)
 
     # to plot the data, one could histogram in d-spacing
-    # dmin, dmax, numbers_bins_d = (1., 10., 9000)
+    # dmin, dmax, numbers_bins_d = (1., 10., 2000)
     # dspacing_bins = sc.Variable(['dspacing'],
     #                             values=np.linspace(dmin, dmax, numbers_bins_d),
     #                             unit=sc.units.angstrom)
