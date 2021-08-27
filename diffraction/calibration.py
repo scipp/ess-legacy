@@ -176,7 +176,7 @@ def convert_with_calibration(dataset, cal):
                                                           - cal["tzero"].data))
                                                 ) / cal["difa"].data
 
-    del output.bins.constituents['data'].coords['tof']
+    del output.events.coords['tof']
     output.rename_dims({'tof': 'dspacing'})
 
     # change units
