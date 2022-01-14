@@ -4,8 +4,8 @@ import mantid.simpleapi as simpleapi
 
 
 def absorption_correction(filename, 
-                          lambda_binning=(0.7, 10.35, 5615),
-                          **mantid_args):
+                          lambda_binning: tuple = (0.7, 10.35, 5615),
+                          **mantid_args) -> sc.DataArray:
     """
     This method is a straightforward wrapper exposing CylinderAbsorption
     through scipp

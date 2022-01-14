@@ -8,7 +8,7 @@ import scippneutron as scn
 import re
 
 
-def load_calibration(filename, mantid_args={}):
+def load_calibration(filename, mantid_args: dict = {}) -> sc.DataArray:
     """
     Function that loads calibration files using the Mantid algorithm
     LoadDiffCal. This algorithm produces up to three workspaces, a
@@ -70,40 +70,59 @@ def load_calibration(filename, mantid_args={}):
         # subsequent handling, e.g., with groupby, more complicated. The mask
         # is conceptually not masking rows in this table, i.e., it is not
         # marking invalid rows, but rather describes masking for other data.
-        cal_data["mask"] = sc.Variable(['row'], values=mask)
-        cal_data["group"] = sc.Variable(['row'], values=group)
+        cal_data["mask"] = sc.Variable(dims=['row'], values=mask)
+        cal_data["group"] = sc.Variable(dims=['row'], values=group)
 
-        cal_data.rename_dims({'row': 'detector'})
-        cal_data.coords['detector'] = sc.Variable(['detector'],
-                                                   values=cal_data['detid'].values.astype(np.int32))
+        cal_data = cal_data.rename_dims({'row': 'detector'})
+        cal_data.coords['detector'] = sc.Variable(dims=['detector'],
+                                                  values=cal_data['detid'].values.astype(np.int32))
         del cal_data['detid']
 
         return cal_data
 
 
-def validate_calibration(calibration):
-    """ Check units stored in calibration """
+def validate_calibration(calibration: sc.DataArray):
+    """ 
+    Check units stored in calibration
+    """
     if calibration["tzero"].unit != sc.units.us:
         raise ValueError("tzero must have units of `us`")
     if calibration["difc"].unit != sc.units.us / sc.units.angstrom:
         raise ValueError("difc must have units of `us / angstrom`")
 
 
-def validate_dataset(dataset):
-    """ Check units stored in dataset  """
+def validate_dataset(dataset: sc.DataArray):
+    """ 
+    Check units stored in dataset
+    """
     # TODO improve handling of othe units
     check_units = re.split('[*/]', str(dataset.unit))
     list_units = [item for item in dir(sc.units) if not item.startswith('_')]
     # We check if the data is expressed as density 
-    # i.e. counts divided or multiplied by other unit or
-    #  1/other unit * counts
+    # i.e. counts divided or multiplied by other_unit or 1/other_unit * counts
     if 'counts' in check_units and \
         all([item.isnumeric() or item in list_units for item in check_units]):
         raise TypeError("Expected non-count-density unit")
 
 
-def convert_with_calibration(dataset, cal):
-    """ Convert from tof to dspacing taking calibration into account  """
+def dspacing(tof: sc.Variable, tzero: sc.Variable, difa: sc.Variable, difc: sc.Variable) -> sc.Variable:
+    """
+    Define d-spacing as function of t with tzero, difa, difc
+    """
+    inv_difa = sc.reciprocal(difa)
+    if sc.all(sc.isinf(inv_difa)).value:
+        inv_difc = sc.reciprocal(difc)
+        return inv_difc * (tof - tzero) 
+    else:
+        # DIFa non zero: tof = DIFa * d**2 + DIFc * d + TZERO. 
+        # d-spacing is the positive solution 
+        return 0.5 * inv_difa * (- difc + np.sqrt(difc**2  + 4 * difa * (tof - tzero))) 
+    
+
+def convert_with_calibration(dataset: sc.DataArray, cal: sc.DataArray) -> sc.DataArray:
+    """ 
+    Convert from tof to dspacing taking calibration into account
+    """
     validate_calibration(cal)
     validate_dataset(dataset)
     output = dataset.copy()
@@ -130,6 +149,7 @@ def convert_with_calibration(dataset, cal):
         # "spectra", since we require labels named "spectrum" and a
         # corresponding dimension. Given that this is in a branch that is
         # access only if "detector_info" is present this should probably be ok.
+
         cal = sc.groupby(cal, group="spectrum").mean('detector')
 
     elif cal["tzero"].dims not in dataset.dims:
@@ -137,69 +157,13 @@ def convert_with_calibration(dataset, cal):
                          cal["tzero"].dims +
                          " that is not present in the converted data " +
                          dataset.dims + ". Missing detector information?")
+        
+    calibration_graph = {"dspacing": dspacing}
+    # TODO: check keys in cal tzero, difa, difc
+    output.coords["tzero"] = cal["tzero"].data
+    output.coords["difc"] = cal["difc"].data
+    output.coords["difa"] = cal["difa"].data
 
-    # 2. Convert to tof if input is in another dimension
-    if 'tof' not in list(output.coords.keys()):
-        list_of_dims_for_input = output.dims
-        list_of_dims_for_input.remove('spectrum')
-        # TODO what happens if there are more than 1 dimension left
-        dim_to_convert = list_of_dims_for_input[0]
-        output = scn.convert(output, dim_to_convert, 'tof', scatter=True)
-
-    # 3. Transform coordinate
-    # all values of DIFa are equal to zero: d-spacing = (tof - TZERO) / DIFc
-    if np.all(cal['difa'].data.values==0):
-        # dealing with 'bins'
-        output.bins.coords['dspacing'] = \
-            (output.bins.coords['tof'] - cal["tzero"].data) / cal["difc"].data
-        # dealing with other part of dataset
-        output.coords['tof'] = \
-            (output.coords['tof'] - cal["tzero"].data) / cal["difc"].data
-
-    else:
-        # DIFa non zero: tof = DIFa * d**2 + DIFc * d + TZERO. 
-        # d-spacing is the positive solution of this polynomials
-
-        # dealing with 'bins'
-        output.bins.coords['dspacing'] = \
-            0.5 * (- cal["difc"].data + np.sqrt(cal["difc"].data**2
-                                               + 4 * cal["difa"].data
-                                                   * (output.coords['tof']
-                                                - cal["tzero"].data))
-                  ) / cal["difa"].data
-
-        # dealing with other part of dataset
-        output.coords['tof'] = 0.5 * (- cal["difc"].data 
-                                                + np.sqrt(cal["difc"].data**2 
-                                                        + 4 * cal["difa"].data 
-                                                        * (output.coords['tof'] 
-                                                          - cal["tzero"].data))
-                                                ) / cal["difa"].data
-
-    del output.bins.constituents['data'].coords['tof']
-    output.rename_dims({'tof': 'dspacing'})
-
-    # change units
-    output.coords['dspacing'].unit = sc.units.angstrom
-
-    # transpose d-spacing if tof dimension of input dataset has more
-    # than 1 dimension
-    if len(output.coords['dspacing'].shape) == 2:
-        output.coords['dspacing'] = sc.transpose(output.coords['dspacing'],
-                                                dims=['spectrum', 'dspacing'])
-
-    # move `position`, `source_position` and `sample_position`
-    # from coordinates to attributes
-    if 'sample_position' in list(output.coords.keys()):
-        output.attrs['sample_position'] = output.coords['sample_position']
-        del output.coords['sample_position']
-
-    if 'source_position' in list(output.coords.keys()):
-        output.attrs['source_position'] = output.coords['source_position']
-        del output.coords['source_position']
-
-    if 'position' in list(output.coords.keys()):
-        output.attrs['position'] = output.coords['position']
-        del output.coords['position']
+    output = output.transform_coords("dspacing", graph=calibration_graph)
 
     return output
