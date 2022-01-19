@@ -83,28 +83,30 @@ def powder_reduction(sample='sample.nxs',
                            mantid_args={'LoadMonitors': True})
 
     # Load calibration
-    if calibration is not None:
-        input_load_cal = {"InstrumentName": "WISH"}
-        cal = load_calibration(calibration, mantid_args=input_load_cal)
-        # Merge table with detector->spectrum mapping from sample
-        # (implicitly checking that detectors between sample and calibration
-        # are the same)
-        cal_sample = sc.merge(cal, sample_data.coords['detector_info'].value)
-        # Compute spectrum mask from detector mask
-        mask = sc.groupby(cal_sample['mask'], group='spectrum').any('detector')
+    if calibration is None:
+        raise ValueError('Calibration should be defined to run this reduction script.')
+      
+    input_load_cal = {"InstrumentName": "WISH"}
+    cal = load_calibration(calibration, mantid_args=input_load_cal)
+    # Merge table with detector->spectrum mapping from sample
+    # (implicitly checking that detectors between sample and calibration
+    # are the same)
+    cal_sample = sc.merge(cal, sample_data.coords['detector_info'].value)
+    # Compute spectrum mask from detector mask
+    mask = sc.groupby(cal_sample['mask'], group='spectrum').any('detector')
 
-        # Compute spectrum groups from detector groups
-        g = sc.groupby(cal_sample['group'], group='spectrum')
+    # Compute spectrum groups from detector groups
+    g = sc.groupby(cal_sample['group'], group='spectrum')
 
-        group = g.min('detector')
+    group = g.min('detector')
 
-        assert sc.identical(group, g.max('detector')), \
-            "Calibration table has mismatching group for detectors in same spectrum"
+    assert sc.identical(group, g.max('detector')), \
+        "Calibration table has mismatching group for detectors in same spectrum"
 
-        sample_data.coords['group'] = group.data
-        sample_data.masks['mask'] = mask.data
+    sample_data.coords['group'] = group.data
+    sample_data.masks['mask'] = mask.data
 
-        del cal
+    del cal
 
     # Correct 4th monitor spectrum
     # There are 5 monitors for WISH. Only one, the fourth one, is selected for
@@ -180,26 +182,20 @@ def powder_reduction(sample='sample.nxs',
                                                        dim='wavelength')
 
     # 3. Convert to d-spacing with option of taking calibration into account
-    if calibration is None:
-        # No calibration data, use standard convert algorithm
-        sample_dspacing = scn.convert(sample_lambda, 'wavelength', 'dspacing', scatter=True)
-    else:
-        # Calculate dspacing from calibration file
-        sample_dspacing = convert_with_calibration(sample_lambda, cal_sample)
+    # Calculate dspacing from calibration file
+    sample_dspacing = convert_with_calibration(sample_lambda, cal_sample)
 
-        # remove wavelength coordinate and set d-spacing as one of the main ones
-        sample_dspacing = sample_dspacing.rename_dims({'wavelength': 'dspacing'})
-        del sample_dspacing.coords['wavelength']  # free up some memory, if not needed any more
-        if sample_dspacing.bins is not None:
-            del sample_dspacing.bins.coords['wavelength']  # free up a lot of memory
+    # remove wavelength coordinate and set d-spacing as one of the main ones
+    sample_dspacing = sample_dspacing.rename_dims({'wavelength': 'dspacing'})
+    del sample_dspacing.coords['wavelength']  # free up some memory, if not needed any more
+    if sample_dspacing.bins is not None:
+        del sample_dspacing.bins.coords['wavelength']  # free up a lot of memory
 
-        del cal_sample
-
-    del sample_lambda
+    del cal_sample, sample_lambda
 
     # 4. Focus panels
     # Assuming sample is in d-spacing: Focus into groups
-    focused = sc.groupby(sample_dspacing, group='group').bins.concatenate('spectrum')
+    focused = sc.groupby(sample_dspacing, group='group').bins.concat('spectrum')
 
     del sample_dspacing
 
@@ -446,7 +442,7 @@ def process_vanadium_data(vanadium,
 
     # Focus
     focused_vana = \
-        sc.groupby(vana_dspacing, group='group').bins.concatenate('spectrum')
+        sc.groupby(vana_dspacing, group='group').bins.concat('spectrum')
 
     del vana_dspacing
 
@@ -457,11 +453,10 @@ if __name__ == "__main__":
 
     # The value 5615 for the number of bins in wavelength corresponds to the
     # value in Mantid after rebinning
-    path_to_files = "/Users/celinedurniak/Documents/WorkESS/Scrum_Demo/DAS-232/"
-    sample_file = path_to_files+'WISH00043525.nxs'
-    cal_file = path_to_files+'WISH_cycle_15_4_noends_10to10_dodgytube_removed_feb2016.cal'
-    vanadium_file = path_to_files+'WISH00019612.nxs'
-    empty_instrument_file = path_to_files+'WISH00019618.nxs'
+    sample_file = 'WISH00043525.nxs'
+    cal_file = 'WISH_cycle_15_4_noends_10to10_dodgytube_removed_feb2016.cal'
+    vanadium_file = 'WISH00019612.nxs'
+    empty_instrument_file = 'WISH00019618.nxs'
     input_for_absorption = {'AttenuationXSection': 2.595,
                             'ScatteringXSection': 5.463,
                             'SampleNumberDensity': 0.025,
