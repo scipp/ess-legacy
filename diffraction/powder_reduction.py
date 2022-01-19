@@ -182,14 +182,20 @@ def powder_reduction(sample='sample.nxs',
                                                        dim='wavelength')
 
     # 3. Convert to d-spacing with option of taking calibration into account
+    # Convert to tof before converting to d-spacing 
+    # (the graph used in the 2nd step requires tof as input dimension)
+    sample_tof = sample_lambda.transform_coords("tof", graph=graph)
+    
+    # remove wavelength coordinate and set tof as one of the main ones
+    sample_tof = sample_tof.rename_dims({'wavelength': 'tof'})
+ 
+    del sample_tof.coords['wavelength']  # free up some memory, if not needed any more
+    
+    if sample_tof.bins is not None:
+        del sample_tof.bins.coords['wavelength']  # free up a lot of memory
+        
     # Calculate dspacing from calibration file
-    sample_dspacing = convert_with_calibration(sample_lambda, cal_sample)
-
-    # remove wavelength coordinate and set d-spacing as one of the main ones
-    sample_dspacing = sample_dspacing.rename_dims({'wavelength': 'dspacing'})
-    del sample_dspacing.coords['wavelength']  # free up some memory, if not needed any more
-    if sample_dspacing.bins is not None:
-        del sample_dspacing.bins.coords['wavelength']  # free up a lot of memory
+    sample_dspacing = convert_with_calibration(sample_tof, cal_sample)
 
     del cal_sample, sample_lambda
 
@@ -428,15 +434,18 @@ def process_vanadium_data(vanadium,
 
     vana_red.coords['group'] = groupvana.data
     vana_red.masks['mask'] = maskvana.data
-
-    # convert to d-spacing with calibration
-    vana_dspacing = convert_with_calibration(vana_red, cal_vana)
-
+    
+    # convert to tof: required input unit for converting to d-spacing with calibration
+    graph = {**beamline(scatter=True), **elastic("tof")}
+    vana_tof = vana_red.transform_coords("tof", graph=graph)
     # clean-up unused 'wavelength 'coordinates
-    vana_dspacing = vana_dspacing.rename_dims({'wavelength': 'dspacing'})
-    del vana_dspacing.coords['wavelength']  # free up some memory, if not needed any more
-    if vana_dspacing.bins is not None:
-        del vana_dspacing.bins.coords['wavelength']  # free up a lot of memory
+    vana_tof = vana_tof.rename_dims({'wavelength': 'tof'})
+    del vana_tof.coords['wavelength']  # free up some memory, if not needed any more
+    if vana_tof.bins is not None:
+        del vana_tof.bins.coords['wavelength']  # free up a lot of memory
+    
+    # convert to d-spacing with calibration
+    vana_dspacing = convert_with_calibration(vana_tof, cal_vana)
 
     del vana_red, cal_vana
 
