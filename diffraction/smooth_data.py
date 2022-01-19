@@ -1,7 +1,7 @@
 import scipp as sc
 
 
-def smooth_data(variable, dim=None, NPoints=3):
+def smooth_data(variable: sc.Variable, dim: str = None, NPoints: int = 3) -> sc.Variable:
     """
     Function that smooths data by assigning the value of each point to the
     mean of the values from surrounding points and itself. The number of points

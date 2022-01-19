@@ -3,7 +3,7 @@ from scipy import interpolate
 import scipp as sc
 
 
-def bspline_background(variable, dim, smoothing_factor=None):
+def bspline_background(variable: sc.Variable, dim: str, smoothing_factor: int = None) -> sc.Variable:
     """
     Use scipy bspline method to create a fitting function to data in
     `variable`. Knots and splines are evaluated internally.
@@ -24,8 +24,8 @@ def bspline_background(variable, dim, smoothing_factor=None):
     """
     if dim is None:
         raise ValueError("bspline_background: dimension must be specified.")
-    if not dim in variable.dims:
-        raise ValueError("bspline_background: dim must be a dimension of variable.")
+    if dim not in variable.dims:
+        raise ValueError("bspline_background: dimension must be one of the variable's dimensions.")
     if smoothing_factor < 0:
         raise ValueError("bspline_background: smoothing_factor must be positive.")
 
